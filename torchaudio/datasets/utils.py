@@ -95,13 +95,150 @@ def download_url_resume(url, download_folder, resume_byte_pos=None):
     filename = os.path.basename(url)
     filepath = os.path.join(download_folder, os.path.basename(url))
 
-    with open(filepath, mode) as f:
-        with tqdm(
-            unit="B", unit_scale=True, unit_divisor=1024, total=file_size
-        ) as pbar:
-            for chunk in r.iter_content(n_block * block_size):
-                f.write(chunk)
+    with open(filepath, mode) as f, tqdm(
+        unit="B", unit_scale=True, unit_divisor=1024, total=file_size
+    ) as pbar:
+        for chunk in r.iter_content(n_block * block_size):
+            f.write(chunk)
+            pbar.update(len(chunk))
+
+
+class URLOpenerWithResume(urllib.request.FancyURLopener):
+    """ Subclass to override error 206 (partial file being sent); okay for us """
+
+    def http_error_206(self, url, fp, errcode, errmsg, headers, data=None):
+        pass  # Ignore the expected "non-error" code
+
+
+def download_url2(url, download_folder, hash_value=None, hash_type="sha256"):
+    """Execute the correct download operation.
+    Depending on the size of the file online and offline, resume the
+    download if the file offline is smaller than online.
+
+    Args:
+        url (str): Url.
+        download_folder (str): Folder to download file.
+        hash_value (str): Hash for url.
+        hash_type (str): Hash type.
+    """
+    resumeUrlclass = URLOpenerWithResume()
+
+    filepath = os.path.join(download_folder, os.path.basename(url))
+
+    if os.path.exists(filepath):
+        mode = "ab"
+        local_size = os.path.getsize(filepath)
+
+        # If the file exists, then download only the remainder
+        resumeUrlclass.addheader("Range", "bytes={}-".format(local_size))
+    else:
+        mode = "wb"
+        local_size = 0
+
+    with open(filepath, mode) as fpointer, resumeUrlclass.open(url) as upointer, tqdm(
+        unit="B", unit_scale=True, unit_divisor=1024, total=file_size
+    ) as pbar:
+
+        # If we already have the whole file, there is no need to download it again
+        num_bytes = 0
+        url_size = int(upointer.headers["Content-Length"])
+        if url_size == local_size:
+            if hash_value:
+                if validate_download_url(url, download_folder, hash_value, hash_type):
+                    print("File {} is validated. Skip download.".format(filepath))
+                else:
+                    print(
+                        "File {} is corrupt. Delete it manually and retry.".format(
+                            filepath
+                        )
+                    )
+            else:
+                print("File {} already on disk. Skip download.".format(filepath))
+        else:
+
+            if local_size == 0:
+                print(
+                    "File {} has not been downloaded. Start download.".format(filepath)
+                )
+            else:
+                print("File {} is incomplete. Resume download.".format(filepath))
+
+            block_size = 32 * 1024
+            while True:
+                chunk = upointer.read(block_size)
+                if not chunk:
+                    break
+                fpointer.write(chunk)
+                num_bytes += len(chunk)
                 pbar.update(len(chunk))
+
+
+def download_url3(url, download_folder, hash_value=None, hash_type="sha256"):
+    """Execute the correct download operation.
+    Depending on the size of the file online and offline, resume the
+    download if the file offline is smaller than online.
+
+    Args:
+        url (str): Url.
+        download_folder (str): Folder to download file.
+        hash_value (str): Hash for url.
+        hash_type (str): Hash type.
+    """
+
+    filepath = os.path.join(download_folder, os.path.basename(url))
+
+    req = urllib.request.Request(url)
+    if os.path.exists(filepath):
+        mode = "ab"
+        local_size = os.path.getsize(filepath)
+
+        # If the file exists, then download only the remainder
+        req.headers["Range"] = "bytes={}-".format(local_size)
+        # print("hit")
+    else:
+        mode = "wb"
+        local_size = 0
+
+    # print(filepath)
+    url_size = int(urllib.request.urlopen(url).info().get("Content-Length", -1))
+    # print(local_size, url_size)
+
+    # If we already have the whole file, there is no need to download it again
+    if url_size == local_size:
+        if hash_value:
+            if validate_download_url(url, download_folder, hash_value, hash_type):
+                print("File {} is validated. Skip download.".format(filepath))
+            else:
+                print(
+                    "File {} is corrupt. Delete it manually and retry.".format(filepath)
+                )
+        else:
+            print("File {} already on disk. Skip download.".format(filepath))
+
+        return
+
+    with open(filepath, mode) as fpointer, urllib.request.urlopen(
+        req
+    ) as upointer, tqdm(
+        unit="B", unit_scale=True, unit_divisor=1024, total=url_size
+    ) as pbar:
+
+        print(url_size, local_size)
+
+        if local_size == 0:
+            print("File {} has not been downloaded. Start download.".format(filepath))
+        else:
+            print("File {} is incomplete. Resume download.".format(filepath))
+
+        num_bytes = 0
+        block_size = 32 * 1024
+        while True:
+            chunk = upointer.read(block_size)
+            if not chunk:
+                break
+            fpointer.write(chunk)
+            num_bytes += len(chunk)
+            pbar.update(len(chunk))
 
 
 def download_url(url, download_folder, hash_value=None, hash_type="sha256"):
