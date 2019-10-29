@@ -104,7 +104,7 @@ def download_url_resume(url, download_folder, resume_byte_pos=None):
                 pbar.update(len(chunk))
 
 
-def download_url(url, download_folder):
+def download_url(url, download_folder, hash_value=None, hash_type="sha256"):
     """Execute the correct download operation.
     Depending on the size of the file online and offline, resume the
     download if the file offline is smaller than online.
@@ -112,6 +112,8 @@ def download_url(url, download_folder):
     Args:
         url (str): Url.
         download_folder (str): Folder to download file.
+        hash_value (str): Hash for url.
+        hash_type (str): Hash type.
     """
     # Establish connection to header of file
     r = requests.head(url)
@@ -127,12 +129,19 @@ def download_url(url, download_folder):
             # Resume download
             print("File {} is incomplete. Resume download.".format(filepath))
             download_url_resume(url, download_folder, file_size_offline)
+        elif hash_value:
+            if validate_download_url(url, download_folder, hash_value, hash_type):
+                print("File {} is validated. Skip download.".format(filepath))
+            else:
+                print(
+                    "File {} is corrupt. Delete it manually and retry.".format(filepath)
+                )
         else:
             # Skip download
             print("File {} is complete. Skip download.".format(filepath))
-            pass
     else:
         # Start download
+        print("File {} has not been downloaded. Start download.".format(filepath))
         download_url_resume(url, download_folder)
 
 
@@ -162,18 +171,8 @@ def validate_download_url(url, download_folder, hash_value, hash_type="sha256"):
             if not chunk:
                 break
             sha.update(chunk)
-    try:
-        assert sha.hexdigest() == hash_value
-    except AssertionError:
-        filepath = os.path.basename(url)
-        print(
-            "File {} is corrupt. Delete it manually and restart the program.".format(
-                filepath
-            )
-        )
-    else:
-        # File validated
-        print("File {} is validated.".format(filepath))
+
+    return sha.hexdigest() == hash_value
 
 
 def extract_archive(from_path, to_path=None, overwrite=False):
