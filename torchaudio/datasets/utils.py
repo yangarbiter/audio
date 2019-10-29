@@ -94,22 +94,15 @@ def download_url(url, download_folder, hash_value=None, hash_type="sha256"):
     # If we already have the whole file, there is no need to download it again
     url_size = int(urllib.request.urlopen(url).info().get("Content-Length", -1))
     if url_size == local_size:
-        if hash_value:
-            if validate_download_url(url, download_folder, hash_value, hash_type):
-                print("File {} is validated. Skip download.".format(filepath))
-            else:
-                print(
-                    "File {} is corrupt. Delete it manually and retry.".format(filepath)
+        if hash_value and not validate_download_url(filepath, hash_value, hash_type):
+            raise RuntimeError(
+                "The hash of {} does not match. Delete the file manually and retry.".format(
+                    filepath
                 )
-        else:
-            print("File {} is already on disk. Skip download.".format(filepath))
+            )
 
         return
 
-    if local_size == 0:
-        print("File {} has not been downloaded. Start download.".format(filepath))
-    else:
-        print("File {} is incomplete. Resume download.".format(filepath))
 
     with open(filepath, mode) as fpointer, urllib.request.urlopen(
         req
@@ -128,10 +121,8 @@ def download_url(url, download_folder, hash_value=None, hash_type="sha256"):
             pbar.update(len(chunk))
 
 
-def validate_download_url(url, download_folder, hash_value, hash_type="sha256"):
+def validate_download_url(filepath, hash_value, hash_type="sha256"):
     """Validate a given file with its hash.
-    The downloaded file is hashed and compared to a pre-registered
-    has value to validate the download procedure.
 
     Args:
         url (str): Url.
@@ -139,7 +130,6 @@ def validate_download_url(url, download_folder, hash_value, hash_type="sha256"):
         hash_value (str): Hash for url.
         hash_type (str): Hash type.
     """
-    filepath = os.path.join(download_folder, os.path.basename(url))
 
     if hash_type == "sha256":
         sha = hashlib.sha256()
