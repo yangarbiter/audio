@@ -1,7 +1,15 @@
 import torch
+import unittest
 
 from torchaudio_unittest import common_utils
 from torchaudio.transducer import RNNTLoss
+from torchaudio._internal.module_utils import is_module_available
+
+
+skipIfNoTransducer = unittest.skipIf(
+    not is_module_available('_warp_transducer'),
+    '"_warp_transducer" is not available',
+)
 
 
 class TransducerTester:
@@ -42,10 +50,12 @@ class TransducerTester:
         loss.backward()
 
 
+@skipIfNoTransducer
 class CPUTransducerTester(TransducerTester, common_utils.PytorchTestCase):
     device = "cpu"
 
 
+@skipIfNoTransducer
 @common_utils.skipIfNoCuda
 class GPUTransducerTester(TransducerTester, common_utils.PytorchTestCase):
     device = "cuda"
