@@ -133,37 +133,41 @@ def _get_ext(debug):
 
 
 def _get_ext_transducer(debug):
-    extra_compile_args = ['-fPIC']
-    extra_compile_args += ['-std=c++14']
     base_path = _TP_TRANSDUCER_BASE_DIR
     default_warp_rnnt_path = base_path / "build"
 
-    if torch.cuda.is_available():
-
-        if "CUDA_HOME" not in os.environ:
-            raise RuntimeError("Please specify the environment variable CUDA_HOME.")
-
-        enable_gpu = True
-
-    else:
-        print("PyTorch was not built with CUDA support, not building GPU extensions.")
-        enable_gpu = False
-
-    if enable_gpu:
-        extra_compile_args += ['-DWARPRNNT_ENABLE_GPU']
+    include_dirs = [os.path.realpath(os.path.join(base_path, 'include'))]
 
     if "WARP_RNNT_PATH" in os.environ:
         warp_rnnt_path = os.environ["WARP_RNNT_PATH"]
     else:
         warp_rnnt_path = default_warp_rnnt_path
-    include_dirs = [os.path.realpath(os.path.join(base_path, 'include'))]
+
+    librairies = ['warprnnt']
+    extra_objects = [str(os.path.join(warp_rnnt_path, f'lib{l}.so')) for l in librairies]
+
+    extra_compile_args = ['-fPIC']
+    extra_compile_args += ['-std=c++14']
+
+    # TODO Enable GPU compilation
+    if False and torch.cuda.is_available():
+
+        if "CUDA_HOME" not in os.environ:
+            raise RuntimeError("Please specify the environment variable CUDA_HOME.")
+
+        extra_compile_args += ['-DWARPRNNT_ENABLE_GPU']
+
+    else:
+        print("Not building GPU extensions.")
 
     return CppExtension(
         name='_warp_transducer',
         sources=[os.path.realpath(base_path / 'pytorch_binding' / 'src' / 'binding.cpp')],
+        # sources=[os.path.realpath(_TP_BASE_DIR / 'binding.cpp')],
         include_dirs=include_dirs,
+        extra_objects=extra_objects,
         library_dirs=[os.path.realpath(warp_rnnt_path)],
-        libraries=['warprnnt'],
+        libraries=librairies,
         extra_link_args=['-Wl,-rpath,' + os.path.realpath(warp_rnnt_path)],
         extra_compile_args=extra_compile_args
     )

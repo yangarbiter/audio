@@ -2,6 +2,14 @@
 # many build scripts
 
 
+setup_cuda_transducer() {
+    export CUDA_TOOLKIT_ROOT_DIR=$CUDA_HOME
+    export LD_LIBRARY_PATH="$CUDA_HOME/extras/CUPTI/lib64:$LD_LIBRARY_PATH"
+    export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
+    export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+    export CFLAGS="-I$CUDA_HOME/include $CFLAGS"
+}
+
 # Setup CUDA environment variables, based on CU_VERSION
 #
 # Inputs:
@@ -56,11 +64,7 @@ setup_cuda() {
       export CUDA_HOME=/usr/local/cuda-10.0/
       export FORCE_CUDA=1
 
-      export CUDA_TOOLKIT_ROOT_DIR=$CUDA_HOME
-      export LD_LIBRARY_PATH="$CUDA_HOME/extras/CUPTI/lib64:$LD_LIBRARY_PATH"
-      export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
-      export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
-      export CFLAGS="-I$CUDA_HOME/include $CFLAGS"
+      setup_cuda_transducer
 
       # Hard-coding gencode flags is temporary situation until
       # https://github.com/pytorch/pytorch/pull/23408 lands
@@ -70,11 +74,7 @@ setup_cuda() {
       export CUDA_HOME=/usr/local/cuda-9.2/
       export FORCE_CUDA=1
 
-      export CUDA_TOOLKIT_ROOT_DIR=$CUDA_HOME
-      export LD_LIBRARY_PATH="$CUDA_HOME/extras/CUPTI/lib64:$LD_LIBRARY_PATH"
-      export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
-      export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
-      export CFLAGS="-I$CUDA_HOME/include $CFLAGS"
+      setup_cuda_transducer
 
       export NVCC_FLAGS="-gencode=arch=compute_35,code=sm_35 -gencode=arch=compute_50,code=sm_50 -gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_70,code=sm_70 -gencode=arch=compute_50,code=compute_50"
       ;;
@@ -206,6 +206,7 @@ setup_conda_pytorch_constraint() {
   else
     export CONDA_PYTORCH_BUILD_CONSTRAINT="- pytorch==${PYTORCH_VERSION}${PYTORCH_VERSION_SUFFIX}"
     export CONDA_PYTORCH_CONSTRAINT="- pytorch==${PYTORCH_VERSION}${PYTORCH_VERSION_SUFFIX}"
+    setup_cuda_transducer
   fi
 }
 
@@ -218,9 +219,11 @@ setup_conda_cudatoolkit_constraint() {
     case "$CU_VERSION" in
       cu100)
         export CONDA_CUDATOOLKIT_CONSTRAINT="- cudatoolkit >=10.0,<10.1 # [not osx]"
+        setup_cuda_transducer
         ;;
       cu92)
         export CONDA_CUDATOOLKIT_CONSTRAINT="- cudatoolkit >=9.2,<9.3 # [not osx]"
+        setup_cuda_transducer
         ;;
       cpu)
         export CONDA_CUDATOOLKIT_CONSTRAINT=""

@@ -29,18 +29,42 @@ if [ -z "${CUDA_VERSION:-}" ] ; then
     else
         cudatoolkit="cpuonly"
     fi
+    # echo "if: setting environment variable"
+    # export CUDA_HOME=/usr/local/cuda
+    # export CUDA_TOOLKIT_ROOT_DIR=$CUDA_HOME
+    # export LD_LIBRARY_PATH="$CUDA_HOME/extras/CUPTI/lib64:$LD_LIBRARY_PATH"
+    # export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
+    # export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+    # export CFLAGS="-I$CUDA_HOME/include $CFLAGS"
+    # echo `ls $CUDA_HOME`
 else
+    # echo "else: setting environment variable"
     version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
     cudatoolkit="cudatoolkit=${version}"
-    export CUDA_HOME=/usr/local/cuda-$cudatoolkit
-    export CUDA_TOOLKIT_ROOT_DIR=$CUDA_HOME
-    export LD_LIBRARY_PATH="$CUDA_HOME/extras/CUPTI/lib64:$LD_LIBRARY_PATH"
-    export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
-    export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
-    export CFLAGS="-I$CUDA_HOME/include $CFLAGS"
+    # # export CUDA_HOME=/usr/local/cuda-$cudatoolkit
+    # export CUDA_HOME=/usr/local/cuda
+    # export CUDA_TOOLKIT_ROOT_DIR=$CUDA_HOME
+    # export LD_LIBRARY_PATH="$CUDA_HOME/extras/CUPTI/lib64:$LD_LIBRARY_PATH"
+    # export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
+    # export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+    # export CFLAGS="-I$CUDA_HOME/include $CFLAGS"
+    # echo `ls $CUDA_HOME`
 fi
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 conda install -y -c "pytorch-${UPLOAD_CHANNEL}" pytorch ${cudatoolkit}
+
+echo "CUDA_HOME may have been set already:"
+echo $CUDA_HOME
+
+export CUDA_HOME=/usr/local/cuda
+export CUDA_TOOLKIT_ROOT_DIR=$CUDA_HOME
+export LD_LIBRARY_PATH="$CUDA_HOME/extras/CUPTI/lib64:$LD_LIBRARY_PATH"
+export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+export CFLAGS="-I$CUDA_HOME/include $CFLAGS"
+
+echo "CUDA_HOME is now:"
+echo $CUDA_HOME
 
 # 2. Install torchaudio
 printf "* Installing torchaudio\n"
