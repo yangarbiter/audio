@@ -55,6 +55,13 @@ setup_cuda() {
     cu100)
       export CUDA_HOME=/usr/local/cuda-10.0/
       export FORCE_CUDA=1
+
+      export CUDA_TOOLKIT_ROOT_DIR=$CUDA_HOME
+      export LD_LIBRARY_PATH="$CUDA_HOME/extras/CUPTI/lib64:$LD_LIBRARY_PATH"
+      export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
+      export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+      export CFLAGS="-I$CUDA_HOME/include $CFLAGS"
+
       # Hard-coding gencode flags is temporary situation until
       # https://github.com/pytorch/pytorch/pull/23408 lands
       export NVCC_FLAGS="-gencode=arch=compute_35,code=sm_35 -gencode=arch=compute_50,code=sm_50 -gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_70,code=sm_70 -gencode=arch=compute_75,code=sm_75 -gencode=arch=compute_50,code=compute_50"
@@ -62,6 +69,13 @@ setup_cuda() {
     cu92)
       export CUDA_HOME=/usr/local/cuda-9.2/
       export FORCE_CUDA=1
+
+      export CUDA_TOOLKIT_ROOT_DIR=$CUDA_HOME
+      export LD_LIBRARY_PATH="$CUDA_HOME/extras/CUPTI/lib64:$LD_LIBRARY_PATH"
+      export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
+      export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+      export CFLAGS="-I$CUDA_HOME/include $CFLAGS"
+
       export NVCC_FLAGS="-gencode=arch=compute_35,code=sm_35 -gencode=arch=compute_50,code=sm_50 -gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_70,code=sm_70 -gencode=arch=compute_50,code=compute_50"
       ;;
     cpu)

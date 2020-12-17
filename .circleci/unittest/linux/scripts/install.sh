@@ -32,6 +32,12 @@ if [ -z "${CUDA_VERSION:-}" ] ; then
 else
     version="$(python -c "print('.'.join(\"${CUDA_VERSION}\".split('.')[:2]))")"
     cudatoolkit="cudatoolkit=${version}"
+    export CUDA_HOME=/usr/local/cuda-$cudatoolkit
+    export CUDA_TOOLKIT_ROOT_DIR=$CUDA_HOME
+    export LD_LIBRARY_PATH="$CUDA_HOME/extras/CUPTI/lib64:$LD_LIBRARY_PATH"
+    export LIBRARY_PATH=$CUDA_HOME/lib64:$LIBRARY_PATH
+    export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+    export CFLAGS="-I$CUDA_HOME/include $CFLAGS"
 fi
 printf "Installing PyTorch with %s\n" "${cudatoolkit}"
 conda install -y -c "pytorch-${UPLOAD_CHANNEL}" pytorch ${cudatoolkit}
