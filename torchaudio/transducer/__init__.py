@@ -1,7 +1,9 @@
 import torch
-import _warp_transducer as warp_rnnt
 from torch.autograd import Function
 from torch.nn import Module
+from torchaudio._internal import (
+    module_utils as _mod_utils,
+)
 
 __all__ = ["rnnt_loss", "RNNTLoss"]
 
@@ -19,7 +21,11 @@ class _RNNT(Function):
 
         certify_inputs(acts, labels, act_lens, label_lens)
 
-        loss_func = warp_rnnt.gpu_rnnt if is_cuda else warp_rnnt.cpu_rnnt
+        if is_cuda:
+            loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.gpu_rnnt
+        else:
+            loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.cpu_rnnt
+
         grads = (
             torch.zeros_like(acts) if acts.requires_grad else torch.zeros(0).to(acts)
         )
@@ -44,6 +50,7 @@ class _RNNT(Function):
         return ctx.grads.mul_(grad_output), None, None, None, None, None
 
 
+@_mod_utils.requires_module('_warp_transducer')
 def rnnt_loss(acts, labels, act_lens, label_lens, blank=0, reduction="mean"):
     """RNN Transducer Loss
 
@@ -64,6 +71,7 @@ def rnnt_loss(acts, labels, act_lens, label_lens, blank=0, reduction="mean"):
     return _RNNT.apply(acts, labels, act_lens, label_lens, blank, reduction)
 
 
+@_mod_utils.requires_module('_warp_transducer')
 class RNNTLoss(Module):
     """
     Parameters:
