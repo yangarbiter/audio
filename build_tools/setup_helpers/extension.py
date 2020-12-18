@@ -144,7 +144,11 @@ def _get_ext_transducer(debug):
         warp_rnnt_path = default_warp_rnnt_path
 
     librairies = ['warprnnt']
-    extra_objects = [str(os.path.join(warp_rnnt_path, f'lib{l}.so')) for l in librairies]
+    if platform.system() == 'Darwin':
+        lib_ext = ".dylib"
+    else:
+        lib_ext = ".so"
+    extra_objects = [str(os.path.join(warp_rnnt_path, f'lib{l}{lib_ext}')) for l in librairies]
 
     extra_compile_args = ['-fPIC']
     extra_compile_args += ['-std=c++14']
