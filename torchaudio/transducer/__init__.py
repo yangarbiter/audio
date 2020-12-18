@@ -17,14 +17,19 @@ class _RNNT(Function):
         act_lens: Tensor of size (batch) containing size of each output sequence from the network
         label_lens: Tensor of (batch) containing label length of each example
         """
-        is_cuda = acts.is_cuda
 
         certify_inputs(acts, labels, act_lens, label_lens)
 
-        if is_cuda:
-            loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.gpu_rnnt
-        else:
-            loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.cpu_rnnt
+        # TODO Enable for GPU support
+        # if acts.is_cuda:
+        #     loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.gpu_rnnt
+        # else:
+        #     loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.cpu_rnnt
+
+        def loss_func(*args):
+            args = (a.to("cpu") if hasattr(a, "to") else a for a in args)
+            loss = torch.ops.warprnnt_pytorch_warp_rnnt.cpu_rnnt(*args)
+            return loss
 
         grads = (
             torch.zeros_like(acts) if acts.requires_grad else torch.zeros(0).to(acts)
@@ -40,7 +45,7 @@ class _RNNT(Function):
                 grads /= minibatch_size
 
         costs = costs.to(acts.device)
-        ctx.grads = grads
+        ctx.grads = grads.to(acts.device)
 
         return costs
 
