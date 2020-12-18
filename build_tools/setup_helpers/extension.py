@@ -164,6 +164,13 @@ def _get_ext_transducer(debug):
     else:
         print("Not building GPU extensions.")
 
+    # if platform.system() == 'Darwin':
+    #     root_dir = "@loader_path"
+    # else:
+    #     root_dir = "$ORIGIN"
+    # rel_warp_rnnt_path = os.path.join(root_dir, 'third_party', 'warp_transducer', 'build')
+    rel_warp_rnnt_path = os.path.realpath(warp_rnnt_path)
+    print("path for object:", rel_warp_rnnt_path)
     return CppExtension(
         name='_warp_transducer',
         sources=[os.path.realpath(base_path / 'pytorch_binding' / 'src' / 'binding.cpp')],
@@ -172,7 +179,7 @@ def _get_ext_transducer(debug):
         extra_objects=extra_objects,
         library_dirs=[os.path.realpath(warp_rnnt_path)],
         libraries=librairies,
-        extra_link_args=['-Wl,-rpath,' + os.path.realpath(warp_rnnt_path)],
+        extra_link_args=['-Wl,-rpath,' + rel_warp_rnnt_path],
         extra_compile_args=extra_compile_args
     )
 
