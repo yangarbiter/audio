@@ -23,20 +23,21 @@ _TP_TRANSDUCER_BASE_DIR = _ROOT_DIR / 'third_party' / 'warp_transducer'
 _TP_INSTALL_DIR = _TP_BASE_DIR / 'install'
 
 
-def _get_build_sox():
-    val = os.environ.get('BUILD_SOX', '0')
+def _get_build_option(var):
+    val = os.environ.get(var, '0')
     trues = ['1', 'true', 'TRUE', 'on', 'ON', 'yes', 'YES']
     falses = ['0', 'false', 'FALSE', 'off', 'OFF', 'no', 'NO']
     if val in trues:
         return True
     if val not in falses:
         print(
-            f'WARNING: Unexpected environment variable value `BUILD_SOX={val}`. '
+            f'WARNING: Unexpected environment variable value `{var}={val}`. '
             f'Expected one of {trues + falses}')
     return False
 
 
-_BUILD_SOX = _get_build_sox()
+_BUILD_SOX = _get_build_option("BUILD_SOX")
+_BUILD_CUDA_WARP_TRANSDUCER = _get_build_option("BUILD_CUDA_WT")
 
 
 def _get_eca(debug):
@@ -134,14 +135,9 @@ def _get_ext(debug):
 
 def _get_ext_transducer(debug):
     base_path = _TP_TRANSDUCER_BASE_DIR
-    default_warp_rnnt_path = base_path / "build"
+    warp_rnnt_path = base_path / "build"
 
     include_dirs = [os.path.realpath(os.path.join(base_path, 'include'))]
-
-    if "WARP_RNNT_PATH" in os.environ:
-        warp_rnnt_path = os.environ["WARP_RNNT_PATH"]
-    else:
-        warp_rnnt_path = default_warp_rnnt_path
 
     librairies = ['warprnnt']
     if platform.system() == 'Darwin':
@@ -154,7 +150,7 @@ def _get_ext_transducer(debug):
     extra_compile_args += ['-std=c++14']
 
     # TODO Enable GPU compilation
-    if False and torch.cuda.is_available():
+    if _BUILD_CUDA_WARP_TRANSDUCER and torch.cuda.is_available():
 
         if "CUDA_HOME" not in os.environ:
             raise RuntimeError("Please specify the environment variable CUDA_HOME.")

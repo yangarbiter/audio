@@ -83,6 +83,7 @@ def assert_sparse_all_close(data, gradients, ref_gradients, atol=1e-6, rtol=1e-2
             idx += (en - st) + 1
 
 
+@common_utils.skipIfNoTransducer
 class PyTorchTransducerLossTest(unittest.TestCase):
     @staticmethod
     def _get_numpy_data_B2_T4_U3_D3(dtype=np.float32):
@@ -522,7 +523,7 @@ class PyTorchTransducerLossTest(unittest.TestCase):
                                 err_msg=f"failed on b={b}, t={t}/T={T}, u={u}/U={U}",
                             )
 
-    @common_utils.skipIfNoCuda
+    @common_utils.skipIfNoCudaTransducer
     def test_nan_logits(self):
         for sparse in [False, True]:
             data = self._get_B1_T10_U3_D4_data(
@@ -546,7 +547,7 @@ class PyTorchTransducerLossTest(unittest.TestCase):
     #         data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
     #     )
 
-    # @common_utils.skipIfNoCuda
+    # @common_utils.skipIfNoCudaTransducer
     # def test_costs_and_gradients_B1_T2_U3_D5_fp32_cuda(self):
 
     #     data, ref_costs, ref_gradients = self._get_numpy_data_B1_T2_U3_D5(
@@ -566,38 +567,39 @@ class PyTorchTransducerLossTest(unittest.TestCase):
             data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
         )
 
-    # @common_utils.skipIfNoCuda
-    # def test_costs_and_gradients_B2_T4_U3_D3_fp32_cuda(self):
+    @common_utils.skipIfNoCudaTransducer
+    def test_costs_and_gradients_B2_T4_U3_D3_fp32_cuda(self):
 
-    #     data, ref_costs, ref_gradients = self._get_numpy_data_B2_T4_U3_D3(
-    #         dtype=np.float32
-    #     )
-    #     data = self._numpy_to_torch(data=data, device="cuda", requires_grad=True)
-    #     self._test_costs_and_gradients(
-    #         data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
-    #     )
+        data, ref_costs, ref_gradients = self._get_numpy_data_B2_T4_U3_D3(
+            dtype=np.float32
+        )
+        data = self._numpy_to_torch(data=data, device="cuda", requires_grad=True)
+        self._test_costs_and_gradients(
+            data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
+        )
 
-    # def test_costs_and_gradients_random_data_with_numpy_fp32_cpu(self):
-    #     seed = 777
-    #     for i in range(5):
-    #         data = self._get_numpy_random_data(dtype=np.float32, seed=(seed + i))
-    #         data = self._numpy_to_torch(data=data, device="cpu", requires_grad=True)
-    #         ref_costs, ref_gradients = self._compute_with_numpy_transducer(data=data)
-    #         self._test_costs_and_gradients(
-    #             data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
-    #         )
+    def test_costs_and_gradients_random_data_with_numpy_fp32_cpu(self):
+        seed = 777
+        import time
+        for i in range(5):
+            data = self._get_numpy_random_data(dtype=np.float32, seed=(seed + i))
+            data = self._numpy_to_torch(data=data, device="cpu", requires_grad=True)
+            ref_costs, ref_gradients = self._compute_with_numpy_transducer(data=data)
+            self._test_costs_and_gradients(
+                data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
+            )
 
-    # @common_utils.skipIfNoCuda
-    # def test_costs_and_gradients_random_data_with_numpy_fp32_cuda(self):
+    @common_utils.skipIfNoCudaTransducer
+    def test_costs_and_gradients_random_data_with_numpy_fp32_cuda(self):
 
-    #     seed = 777
-    #     for i in range(5):
-    #         data = self._get_numpy_random_data(dtype=np.float32, seed=(seed + i))
-    #         data = self._numpy_to_torch(data=data, device="cuda", requires_grad=True)
-    #         ref_costs, ref_gradients = self._compute_with_numpy_transducer(data=data)
-    #         self._test_costs_and_gradients(
-    #             data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
-    #         )
+        seed = 777
+        for i in range(5):
+            data = self._get_numpy_random_data(dtype=np.float32, seed=(seed + i))
+            data = self._numpy_to_torch(data=data, device="cuda", requires_grad=True)
+            ref_costs, ref_gradients = self._compute_with_numpy_transducer(data=data)
+            self._test_costs_and_gradients(
+                data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
+            )
 
     @staticmethod
     def _test_against_warp_transducer(data, iters):
@@ -764,7 +766,7 @@ class PyTorchTransducerLossTest(unittest.TestCase):
             data["cells_per_sample"] = cells_per_sample
         return data
 
-    @common_utils.skipIfNoCuda
+    @common_utils.skipIfNoCudaTransducer
     def test_rnnt_restricted_B1_T10_U3_D4_gpu(self):
         for random in [False]:
             for l_buffer in [0, 1, 10]:
@@ -782,7 +784,7 @@ class PyTorchTransducerLossTest(unittest.TestCase):
                         data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
                     )
 
-    @common_utils.skipIfNoCuda
+    @common_utils.skipIfNoCudaTransducer
     def test_rnnt_sparse_B1_T10_U3_D4_gpu(self):
         for random in [False, True]:
             for l_buffer in [1, 2, 10]:
@@ -802,7 +804,7 @@ class PyTorchTransducerLossTest(unittest.TestCase):
                         data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
                     )
 
-    @common_utils.skipIfNoCuda
+    @common_utils.skipIfNoCudaTransducer
     def test_rnnt_sparse_nonfused_log_smax_gpu(self):
         for random in [False, True]:
             for l_buffer in [1, 2, 10]:
@@ -823,7 +825,7 @@ class PyTorchTransducerLossTest(unittest.TestCase):
                         data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
                     )
 
-    @common_utils.skipIfNoCuda
+    @common_utils.skipIfNoCudaTransducer
     def test_rnnt_sparse_B1_T10_U3_D4_gpu_fp16(self):
         for random in [False, True]:
             for l_buffer in [1, 2, 10]:
@@ -852,6 +854,7 @@ class PyTorchTransducerLossTest(unittest.TestCase):
                     )
 
 
+@common_utils.skipIfNoTransducer
 class PyTorchTransducerLossMultipleHyposTest(unittest.TestCase):
     def _get_data_multiple_hypo(
         self, random=False, l_buffer=0, r_buffer=0, sparse=False, dtype=np.float32
@@ -882,7 +885,7 @@ class PyTorchTransducerLossMultipleHyposTest(unittest.TestCase):
             data["cells_per_sample"] = cells_per_sample
         return data
 
-    @common_utils.skipIfNoCuda
+    @common_utils.skipIfNoCudaTransducer
     def test_rnnt_sparse_multi_hypo_gpu(self):
         for random in [False, True]:
             for l_buffer in [1, 2, 10]:
