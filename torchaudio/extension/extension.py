@@ -22,7 +22,7 @@ def _init_transducer_extension():
         # path = importlib.util.find_spec(ext).origin
         # torch.ops.load_library(path)
     else:
-        warnings.warn('warp-transducer extension is not available.')
+        warnings.warn('{ext} extension is not available.')
 
 
 def _init_script_module(module):

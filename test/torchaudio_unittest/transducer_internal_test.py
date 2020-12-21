@@ -566,16 +566,16 @@ class PyTorchTransducerLossTest(unittest.TestCase):
             data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
         )
 
-    @common_utils.skipIfNoCuda
-    def test_costs_and_gradients_B2_T4_U3_D3_fp32_cuda(self):
+    # @common_utils.skipIfNoCuda
+    # def test_costs_and_gradients_B2_T4_U3_D3_fp32_cuda(self):
 
-        data, ref_costs, ref_gradients = self._get_numpy_data_B2_T4_U3_D3(
-            dtype=np.float32
-        )
-        data = self._numpy_to_torch(data=data, device="cuda", requires_grad=True)
-        self._test_costs_and_gradients(
-            data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
-        )
+    #     data, ref_costs, ref_gradients = self._get_numpy_data_B2_T4_U3_D3(
+    #         dtype=np.float32
+    #     )
+    #     data = self._numpy_to_torch(data=data, device="cuda", requires_grad=True)
+    #     self._test_costs_and_gradients(
+    #         data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
+    #     )
 
     # def test_costs_and_gradients_random_data_with_numpy_fp32_cpu(self):
     #     seed = 777

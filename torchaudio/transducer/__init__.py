@@ -19,11 +19,12 @@ class _RNNT(Function):
         """
 
         device = acts.device
-        acts = torch.tensor(acts, requires_grad=True, device="cpu", dtype=acts.dtype)
+        # acts = torch.tensor(acts, requires_grad=True, device="cpu", dtype=acts.dtype)
         certify_inputs(acts, labels, act_lens, label_lens)
 
         # TODO Enable for GPU support
-        if False and acts.is_cuda:
+        if acts.is_cuda:
+            raise RuntimeError("GPU not supported")
             loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.gpu_rnnt
         else:
             loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.cpu_rnnt
@@ -52,7 +53,7 @@ class _RNNT(Function):
     @staticmethod
     def backward(ctx, grad_output):
         grad_output = grad_output.view(-1, 1, 1, 1).to(ctx.grads)
-        print("backwarc", grad_output.shape, ctx.grads.shape)
+        # print("backwarc", grad_output.shape, ctx.grads.shape)
         return ctx.grads.mul_(grad_output), None, None, None, None, None
 
 
