@@ -18,24 +18,24 @@ class _RNNT(Function):
         label_lens: Tensor of (batch) containing label length of each example
         """
 
+        device = acts.device
+        acts = torch.tensor(acts, requires_grad=True, device="cpu", dtype=acts.dtype)
         certify_inputs(acts, labels, act_lens, label_lens)
 
         # TODO Enable for GPU support
-        # if acts.is_cuda:
-        #     loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.gpu_rnnt
-        # else:
-        #     loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.cpu_rnnt
+        if False and acts.is_cuda:
+            loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.gpu_rnnt
+        else:
+            loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.cpu_rnnt
 
-        def loss_func(*args):
-            args = (a.to("cpu") if hasattr(a, "to") else a for a in args)
-            loss = torch.ops.warprnnt_pytorch_warp_rnnt.cpu_rnnt(*args)
-            return loss
-
+        # print("requires_grad", acts.requires_grad)
         grads = (
             torch.zeros_like(acts) if acts.requires_grad else torch.zeros(0).to(acts)
         )
         minibatch_size = acts.size(0)
         costs = torch.zeros(minibatch_size, dtype=acts.dtype)
+
+        # print(acts.device, labels.device, act_lens.device, label_lens.device, costs.device, grads.device)
         loss_func(acts, labels, act_lens, label_lens, costs, grads, blank, 0)
 
         if reduction in ["sum", "mean"]:
@@ -44,14 +44,15 @@ class _RNNT(Function):
                 costs /= minibatch_size
                 grads /= minibatch_size
 
-        costs = costs.to(acts.device)
-        ctx.grads = grads.to(acts.device)
+        costs = costs.to(device)
+        ctx.grads = grads.to(device)
 
         return costs
 
     @staticmethod
     def backward(ctx, grad_output):
         grad_output = grad_output.view(-1, 1, 1, 1).to(ctx.grads)
+        print("backwarc", grad_output.shape, ctx.grads.shape)
         return ctx.grads.mul_(grad_output), None, None, None, None, None
 
 

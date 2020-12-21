@@ -7,6 +7,7 @@ import numpy as np
 import torch
 from torchaudio.transducer import RNNTLoss as PyTorchTransducerLoss
 from torchaudio.transducer import RNNTLoss as WarpTransducerLoss
+from torchaudio_unittest import common_utils
 
 from .numpy_transducer import (
     AlignmentRestrictionCheck,
@@ -53,7 +54,7 @@ def get_sparse(data, dense_tensor, l_buffer, r_buffer, H=1):
 
 def compute_with_pytorch_transducer(data):
 
-    costs = PyTorchTransducerLoss(blank=data["blank"])(
+    costs = PyTorchTransducerLoss(blank=data["blank"], reduction="none")(
         acts=data["logits_sparse"] if "logits_sparse" in data else data["logits"],
         labels=data["targets"],
         act_lens=data["src_lengths"],
@@ -521,9 +522,8 @@ class PyTorchTransducerLossTest(unittest.TestCase):
                                 err_msg=f"failed on b={b}, t={t}/T={T}, u={u}/U={U}",
                             )
 
+    @common_utils.skipIfNoCuda
     def test_nan_logits(self):
-        if not torch.cuda.is_available():
-            return
         for sparse in [False, True]:
             data = self._get_B1_T10_U3_D4_data(
                 random=True, l_buffer=10, r_buffer=10, sparse=sparse, nan=True
@@ -546,9 +546,8 @@ class PyTorchTransducerLossTest(unittest.TestCase):
     #         data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
     #     )
 
+    # @common_utils.skipIfNoCuda
     # def test_costs_and_gradients_B1_T2_U3_D5_fp32_cuda(self):
-    #     if not torch.cuda.is_available():
-    #         return
 
     #     data, ref_costs, ref_gradients = self._get_numpy_data_B1_T2_U3_D5(
     #         dtype=np.float32
@@ -557,22 +556,6 @@ class PyTorchTransducerLossTest(unittest.TestCase):
     #     self._test_costs_and_gradients(
     #         data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
     #     )
-
-    def test_costs_and_gradients_B1_T2_U3_D5_fp16_cuda(self):
-        if not torch.cuda.is_available():
-            return
-
-        data, ref_costs, ref_gradients = self._get_numpy_data_B1_T2_U3_D5(
-            dtype=np.float16
-        )
-        data = self._numpy_to_torch(data=data, device="cuda", requires_grad=True)
-        self._test_costs_and_gradients(
-            data=data,
-            ref_costs=ref_costs,
-            ref_gradients=ref_gradients,
-            atol=1e-3,
-            rtol=1e-2,
-        )
 
     def test_costs_and_gradients_B2_T4_U3_D3_fp32_cpu(self):
         data, ref_costs, ref_gradients = self._get_numpy_data_B2_T4_U3_D3(
@@ -583,9 +566,8 @@ class PyTorchTransducerLossTest(unittest.TestCase):
             data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
         )
 
+    @common_utils.skipIfNoCuda
     def test_costs_and_gradients_B2_T4_U3_D3_fp32_cuda(self):
-        if not torch.cuda.is_available():
-            return
 
         data, ref_costs, ref_gradients = self._get_numpy_data_B2_T4_U3_D3(
             dtype=np.float32
@@ -593,22 +575,6 @@ class PyTorchTransducerLossTest(unittest.TestCase):
         data = self._numpy_to_torch(data=data, device="cuda", requires_grad=True)
         self._test_costs_and_gradients(
             data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
-        )
-
-    def test_costs_and_gradients_B2_T4_U3_D3_fp16_cuda(self):
-        if not torch.cuda.is_available():
-            return
-
-        data, ref_costs, ref_gradients = self._get_numpy_data_B2_T4_U3_D3(
-            dtype=np.float16
-        )
-        data = self._numpy_to_torch(data=data, device="cuda", requires_grad=True)
-        self._test_costs_and_gradients(
-            data=data,
-            ref_costs=ref_costs,
-            ref_gradients=ref_gradients,
-            atol=1e-3,
-            rtol=1e-2,
         )
 
     # def test_costs_and_gradients_random_data_with_numpy_fp32_cpu(self):
@@ -621,9 +587,8 @@ class PyTorchTransducerLossTest(unittest.TestCase):
     #             data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
     #         )
 
+    # @common_utils.skipIfNoCuda
     # def test_costs_and_gradients_random_data_with_numpy_fp32_cuda(self):
-    #     if not torch.cuda.is_available():
-    #         return
 
     #     seed = 777
     #     for i in range(5):
@@ -657,7 +622,7 @@ class PyTorchTransducerLossTest(unittest.TestCase):
         pytorch_elapsed = 0
         for i in range(iters):
             tic = time.time()
-            costs = PyTorchTransducerLoss(blank=blank)(
+            costs = PyTorchTransducerLoss(blank=blank, reduction="none")(
                 logits=logits,
                 src_lengths=src_lengths,
                 tgt_lengths=tgt_lengths,
@@ -693,7 +658,7 @@ class PyTorchTransducerLossTest(unittest.TestCase):
         fp32_elapsed = 0
         for i in range(iters):
             tic = time.time()
-            costs = PyTorchTransducerLoss(blank=blank)(
+            costs = PyTorchTransducerLoss(blank=blank, reduction="none")(
                 logits=fp32_logits,
                 src_lengths=src_lengths,
                 tgt_lengths=tgt_lengths,
@@ -708,7 +673,7 @@ class PyTorchTransducerLossTest(unittest.TestCase):
         fp16_elapsed = 0
         for i in range(iters):
             tic = time.time()
-            costs = PyTorchTransducerLoss(blank=blank)(
+            costs = PyTorchTransducerLoss(blank=blank, reduction="none")(
                 logits=fp16_logits,
                 src_lengths=src_lengths,
                 tgt_lengths=tgt_lengths,
@@ -799,9 +764,8 @@ class PyTorchTransducerLossTest(unittest.TestCase):
             data["cells_per_sample"] = cells_per_sample
         return data
 
+    @common_utils.skipIfNoCuda
     def test_rnnt_restricted_B1_T10_U3_D4_gpu(self):
-        if not torch.cuda.is_available():
-            return
         for random in [False]:
             for l_buffer in [0, 1, 10]:
                 for r_buffer in [0, 1, 2, 5, 10]:
@@ -818,27 +782,8 @@ class PyTorchTransducerLossTest(unittest.TestCase):
                         data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
                     )
 
-    def test_restricted_parity_with_unrestricted_B1_T10_U3_D4_gpu(self):
-        if not torch.cuda.is_available():
-            return
-        for random in [False, True]:
-            data = self._get_B1_T10_U3_D4_data(random=random)
-            data = self._numpy_to_torch(data=data, device="cuda", requires_grad=True)
-            wp_ends = data["wp_ends"]
-            del data["wp_ends"]
-            ref_costs, ref_gradients = compute_with_pytorch_transducer(data=data)
-            data["wp_ends"] = wp_ends
-            data["l_buffer"] = 100
-            data["r_buffer"] = 100
-            wp_costs, wp_gradients = compute_with_pytorch_transducer(data=data)
-            np.testing.assert_allclose(ref_costs, wp_costs, atol=1e-2, rtol=1e-2)
-            np.testing.assert_allclose(
-                ref_gradients, wp_gradients, atol=1e-2, rtol=1e-2
-            )
-
+    @common_utils.skipIfNoCuda
     def test_rnnt_sparse_B1_T10_U3_D4_gpu(self):
-        if not torch.cuda.is_available():
-            return
         for random in [False, True]:
             for l_buffer in [1, 2, 10]:
                 for r_buffer in [1, 2, 5, 10]:
@@ -857,9 +802,8 @@ class PyTorchTransducerLossTest(unittest.TestCase):
                         data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
                     )
 
+    @common_utils.skipIfNoCuda
     def test_rnnt_sparse_nonfused_log_smax_gpu(self):
-        if not torch.cuda.is_available():
-            return
         for random in [False, True]:
             for l_buffer in [1, 2, 10]:
                 for r_buffer in [1, 2, 5, 10]:
@@ -879,9 +823,8 @@ class PyTorchTransducerLossTest(unittest.TestCase):
                         data=data, ref_costs=ref_costs, ref_gradients=ref_gradients
                     )
 
+    @common_utils.skipIfNoCuda
     def test_rnnt_sparse_B1_T10_U3_D4_gpu_fp16(self):
-        if not torch.cuda.is_available():
-            return
         for random in [False, True]:
             for l_buffer in [1, 2, 10]:
                 for r_buffer in [1, 2, 5, 10]:
@@ -939,9 +882,8 @@ class PyTorchTransducerLossMultipleHyposTest(unittest.TestCase):
             data["cells_per_sample"] = cells_per_sample
         return data
 
+    @common_utils.skipIfNoCuda
     def test_rnnt_sparse_multi_hypo_gpu(self):
-        if not torch.cuda.is_available():
-            return
         for random in [False, True]:
             for l_buffer in [1, 2, 10]:
                 for r_buffer in [1, 2, 5, 10]:

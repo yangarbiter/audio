@@ -37,9 +37,9 @@ class TransducerTester:
         label_length = torch.IntTensor([2])
 
         acts = acts.to(self.device)
-        labels = labels.to(self.device)
-        act_length = act_length.to(self.device)
-        label_length = label_length.to(self.device)
+        # labels = labels.to(self.device)
+        # act_length = act_length.to(self.device)
+        # label_length = label_length.to(self.device)
 
         acts = torch.autograd.Variable(acts, requires_grad=True)
         labels = torch.autograd.Variable(labels)
