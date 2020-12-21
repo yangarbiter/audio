@@ -20,6 +20,7 @@ _ROOT_DIR = _THIS_DIR.parent.parent.resolve()
 _CSRC_DIR = _ROOT_DIR / 'torchaudio' / 'csrc'
 _TP_BASE_DIR = _ROOT_DIR / 'third_party'
 _TP_TRANSDUCER_BASE_DIR = _ROOT_DIR / 'third_party' / 'warp_transducer'
+_TP_TRANSDUCER_MODULE_DIR = _ROOT_DIR / 'third_party' / 'warp_transducer' / 'submodule'
 _TP_INSTALL_DIR = _TP_BASE_DIR / 'install'
 
 
@@ -134,10 +135,11 @@ def _get_ext(debug):
 
 
 def _get_ext_transducer(debug):
-    base_path = _TP_TRANSDUCER_BASE_DIR
-    warp_rnnt_path = base_path / "build"
+    warp_rnnt_path = _TP_TRANSDUCER_MODULE_DIR / "build"
 
-    include_dirs = [os.path.realpath(os.path.join(base_path, 'include'))]
+    include_dirs = [
+        os.path.realpath(os.path.join(_TP_TRANSDUCER_MODULE_DIR, 'include')),
+    ]
 
     librairies = ['warprnnt']
     if platform.system() == 'Darwin':
@@ -155,7 +157,7 @@ def _get_ext_transducer(debug):
         if "CUDA_HOME" not in os.environ:
             raise RuntimeError("Please specify the environment variable CUDA_HOME.")
 
-        extra_compile_args += ['-DWARPRNNT_ENABLE_GPU']
+        extra_compile_args += ['-DWARPRNNT_ENABLE_GPU', '-DWITH_OMP=OFF']
 
     else:
         print("Not building GPU extensions.")
@@ -169,8 +171,7 @@ def _get_ext_transducer(debug):
     print("path for object:", rel_warp_rnnt_path)
     return CppExtension(
         name='_warp_transducer',
-        sources=[os.path.realpath(base_path / 'pytorch_binding' / 'src' / 'binding.cpp')],
-        # sources=[os.path.realpath(_TP_BASE_DIR / 'binding.cpp')],
+        sources=[os.path.realpath(_TP_TRANSDUCER_BASE_DIR / 'src' / 'binding.cpp')],
         include_dirs=include_dirs,
         extra_objects=extra_objects,
         library_dirs=[os.path.realpath(warp_rnnt_path)],
@@ -197,5 +198,5 @@ class BuildExtension(TorchBuildExtension):
         if ext.name == _EXT_NAME and _BUILD_SOX:
             _build_third_party(_TP_BASE_DIR)
         if ext.name == "_warp_transducer":
-            _build_third_party(_TP_TRANSDUCER_BASE_DIR)
+            _build_third_party(_TP_TRANSDUCER_MODULE_DIR)
         super().build_extension(ext)

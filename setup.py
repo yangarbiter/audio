@@ -51,7 +51,7 @@ class clean(distutils.command.clean.clean):
         build_dirs = [
             ROOT_DIR / 'build',
             ROOT_DIR / 'third_party' / 'build',
-            ROOT_DIR / 'third_party' / 'warp_transducer' / 'build',
+            ROOT_DIR / 'third_party' / 'warp_transducer' / 'submodule' / 'build',
         ]
         for path in build_dirs:
             if path.exists():
