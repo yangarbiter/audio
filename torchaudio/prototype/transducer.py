@@ -7,12 +7,6 @@ from torchaudio._internal import (
 
 __all__ = ["rnnt_loss", "RNNTLoss"]
 
-try:
-    torch.ops.warprnnt_pytorch_warp_rnnt.gpu_rnnt
-    _CUDA = True
-except RuntimeError:
-    _CUDA = False
-
 
 class _RNNT(Function):
     @staticmethod
@@ -27,12 +21,8 @@ class _RNNT(Function):
         device = acts.device
         certify_inputs(acts, labels, act_lens, label_lens)
 
-        # TODO Enable for GPU support
         if acts.is_cuda:
-            if _CUDA:
-                loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.gpu_rnnt
-            else:
-                raise RuntimeError("The loss function currently does not support GPU.")
+            raise RuntimeError("The loss function currently does not support GPU.")
         else:
             loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.cpu_rnnt
 

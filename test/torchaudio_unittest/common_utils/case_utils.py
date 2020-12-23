@@ -81,15 +81,3 @@ skipIfNoTransducer = unittest.skipIf(
     not is_module_available('_warp_transducer'),
     '"_warp_transducer" is not available',
 )
-
-try:
-    torch.ops.warprnnt_pytorch_warp_rnnt.gpu_rnnt
-    _CUDA_TRANSDUCER = True
-except RuntimeError:
-    _CUDA_TRANSDUCER = False
-
-
-skipIfNoCudaTransducer = unittest.skipIf(
-    not _CUDA_TRANSDUCER,
-    '"_warp_transducer" not built with GPU support',
-)

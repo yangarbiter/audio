@@ -295,8 +295,3 @@ class TransducerTester:
 @common_utils.skipIfNoTransducer
 class CPUTransducerTester(TransducerTester, common_utils.PytorchTestCase):
     device = "cpu"
-
-
-@common_utils.skipIfNoCudaTransducer
-class GPUTransducerTester(TransducerTester, common_utils.PytorchTestCase):
-    device = "cuda"
