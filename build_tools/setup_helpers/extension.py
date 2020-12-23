@@ -1,8 +1,6 @@
 import os
 import platform
 import subprocess
-import torch
-
 from pathlib import Path
 
 from torch.utils.cpp_extension import (
@@ -19,26 +17,23 @@ _THIS_DIR = Path(__file__).parent.resolve()
 _ROOT_DIR = _THIS_DIR.parent.parent.resolve()
 _CSRC_DIR = _ROOT_DIR / 'torchaudio' / 'csrc'
 _TP_BASE_DIR = _ROOT_DIR / 'third_party'
-_TP_TRANSDUCER_BASE_DIR = _ROOT_DIR / 'third_party' / 'warp_transducer'
-_TP_TRANSDUCER_MODULE_DIR = _ROOT_DIR / 'third_party' / 'warp_transducer' / 'submodule'
 _TP_INSTALL_DIR = _TP_BASE_DIR / 'install'
 
 
-def _get_build_option(var):
-    val = os.environ.get(var, '0')
+def _get_build_sox():
+    val = os.environ.get('BUILD_SOX', '0')
     trues = ['1', 'true', 'TRUE', 'on', 'ON', 'yes', 'YES']
     falses = ['0', 'false', 'FALSE', 'off', 'OFF', 'no', 'NO']
     if val in trues:
         return True
     if val not in falses:
         print(
-            f'WARNING: Unexpected environment variable value `{var}={val}`. '
+            f'WARNING: Unexpected environment variable value `BUILD_SOX={val}`. '
             f'Expected one of {trues + falses}')
     return False
 
 
-_BUILD_SOX = _get_build_option("BUILD_SOX")
-_BUILD_CUDA_WARP_TRANSDUCER = _get_build_option("BUILD_CUDA_WT")
+_BUILD_SOX = _get_build_sox()
 
 
 def _get_eca(debug):
@@ -106,12 +101,11 @@ def _get_libraries():
     return [] if _BUILD_SOX else ['sox']
 
 
-def _build_third_party(base_dir, target=['..'], options=[]):
-    print(f"Building third party library in {base_dir}...")
-    build_dir = str(base_dir / 'build')
+def _build_third_party():
+    build_dir = str(_TP_BASE_DIR / 'build')
     os.makedirs(build_dir, exist_ok=True)
     subprocess.run(
-        args=['cmake'] + target + options,
+        args=['cmake', '..'],
         cwd=build_dir,
         check=True,
     )
@@ -122,39 +116,68 @@ def _build_third_party(base_dir, target=['..'], options=[]):
     )
 
 
-def _get_ext(debug):
-    return CppExtension(
-        _EXT_NAME,
-        _get_srcs(),
-        libraries=_get_libraries(),
-        include_dirs=_get_include_dirs(),
-        extra_compile_args=_get_eca(debug),
-        extra_objects=_get_extra_objects(),
-        extra_link_args=_get_ela(debug),
+_EXT_NAME = 'torchaudio._torchaudio'
+
+
+def get_ext_modules(debug=False):
+    if platform.system() == 'Windows':
+        return None
+    return [
+        CppExtension(
+            _EXT_NAME,
+            _get_srcs(),
+            libraries=_get_libraries(),
+            include_dirs=_get_include_dirs(),
+            extra_compile_args=_get_eca(debug),
+            extra_objects=_get_extra_objects(),
+            extra_link_args=_get_ela(debug),
+        ),
+        _get_transducer_module(),
+    ]
+
+
+class BuildExtension(TorchBuildExtension):
+    def build_extension(self, ext):
+        if ext.name == _EXT_NAME and _BUILD_SOX:
+            _build_third_party()
+        if ext.name == _TRANSDUCER_NAME:
+            _build_transducer()
+        super().build_extension(ext)
+
+
+_TRANSDUCER_NAME = '_warp_transducer'
+_TP_TRANSDUCER_BASE_DIR = _ROOT_DIR / 'third_party' / 'warp_transducer'
+
+
+def _build_transducer():
+    build_dir = str(_TP_TRANSDUCER_BASE_DIR / 'submodule' / 'build')
+    os.makedirs(build_dir, exist_ok=True)
+    subprocess.run(
+        args=['cmake', str(_TP_TRANSDUCER_BASE_DIR), '-DWITH_OMP=OFF'],
+        cwd=build_dir,
+        check=True,
+    )
+    subprocess.run(
+        args=['cmake', '--build', '.'],
+        cwd=build_dir,
+        check=True,
     )
 
 
-def _get_ext_transducer(debug):
+def _get_transducer_module():
     extra_compile_args = [
         '-fPIC',
         '-std=c++14',
     ]
 
-    if _BUILD_CUDA_WARP_TRANSDUCER and torch.cuda.is_available():
-        print("Building GPU extensions for warp_transudcer.")
-        if "CUDA_HOME" not in os.environ:
-            raise RuntimeError("Please specify the environment variable CUDA_HOME.")
-        extra_compile_args += ['-DWARPRNNT_ENABLE_GPU']
-    else:
-        print("Not building GPU extensions for warp_transudcer.")
-
     librairies = ['warprnnt']
-    build_path = _TP_TRANSDUCER_MODULE_DIR / 'build'
-    include_path = _TP_TRANSDUCER_MODULE_DIR / 'include'
+
     source_path = _TP_TRANSDUCER_BASE_DIR / 'binding.cpp'
+    build_path = _TP_TRANSDUCER_BASE_DIR / 'submodule' / 'build'
+    include_path = _TP_TRANSDUCER_BASE_DIR / 'submodule' / 'include'
 
     return CppExtension(
-        name='_warp_transducer',
+        name=_TRANSDUCER_NAME,
         sources=[os.path.realpath(source_path)],
         libraries=librairies,
         include_dirs=[os.path.realpath(include_path)],
@@ -163,32 +186,3 @@ def _get_ext_transducer(debug):
         extra_objects=[str(build_path / f'lib{l}.a') for l in librairies],
         extra_link_args=['-Wl,-rpath,' + os.path.realpath(build_path)],
     )
-
-
-_EXT_NAME = 'torchaudio._torchaudio'
-
-
-def get_ext_modules(debug=False):
-    if platform.system() == 'Windows':
-        return None
-    return [
-        _get_ext(debug),
-        _get_ext_transducer(debug),
-    ]
-
-
-class BuildExtension(TorchBuildExtension):
-    def build_extension(self, ext):
-        if ext.name == _EXT_NAME and _BUILD_SOX:
-            _build_third_party(_TP_BASE_DIR)
-        if ext.name == "_warp_transducer":
-            # TODO Support OMP on MacOS
-            _build_third_party(
-                _TP_TRANSDUCER_MODULE_DIR,
-                target=[str(_TP_TRANSDUCER_BASE_DIR)],
-                options=[
-                    "-DWITH_OMP=OFF",
-                    "-DWITH_GPU=ON" if _BUILD_CUDA_WARP_TRANSDUCER else "-DWITH_GPU=OFF",
-                ]
-            )
-        super().build_extension(ext)
