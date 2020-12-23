@@ -172,17 +172,20 @@ def _get_transducer_module():
 
     librairies = ['warprnnt']
 
-    source_path = _TP_TRANSDUCER_BASE_DIR / 'binding.cpp'
+    source_paths = [
+        _TP_TRANSDUCER_BASE_DIR / 'binding.cpp',
+        _TP_TRANSDUCER_BASE_DIR / 'submodule' / 'pytorch_binding' / 'src' / 'binding.cpp',
+    ]
     build_path = _TP_TRANSDUCER_BASE_DIR / 'submodule' / 'build'
     include_path = _TP_TRANSDUCER_BASE_DIR / 'submodule' / 'include'
 
     return CppExtension(
         name=_TRANSDUCER_NAME,
-        sources=[os.path.realpath(source_path)],
+        sources=[os.path.realpath(path) for path in source_paths],
         libraries=librairies,
         include_dirs=[os.path.realpath(include_path)],
         library_dirs=[os.path.realpath(build_path)],
         extra_compile_args=extra_compile_args,
-        extra_objects=[str(build_path / f'lib{l}.a') for l in librairies],
+        extra_objects=[str(build_path / f'lib{lib}.a') for lib in librairies],
         extra_link_args=['-Wl,-rpath,' + os.path.realpath(build_path)],
     )
