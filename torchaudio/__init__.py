@@ -1,4 +1,6 @@
 from . import extension
+from . import prototype
+
 from torchaudio._internal import module_utils as _mod_utils
 from torchaudio import (
     compliance,
@@ -6,8 +8,7 @@ from torchaudio import (
     kaldi_io,
     utils,
     sox_effects,
-    transforms,
-    transducer,
+    transforms
 )
 
 USE_SOUNDFILE_LEGACY_INTERFACE = None
