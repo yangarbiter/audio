@@ -22,7 +22,13 @@ class _RNNT(Function):
         certify_inputs(acts, labels, act_lens, label_lens)
 
         if acts.is_cuda:
-            raise RuntimeError("The loss function currently does not support GPU.")
+            acts = acts.to("cpu")
+            acts.requires_grad = True
+            labels = labels.to("cpu")
+            act_lens = act_lens.to("cpu")
+            label_lens = label_lens.to("cpu")
+
+            loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.cpu_rnnt
         else:
             loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.cpu_rnnt
 
@@ -66,9 +72,10 @@ def rnnt_loss(acts, labels, act_lens, label_lens, blank=0, reduction="mean"):
             'mean': the output losses will be divided by the target lengths and
             then the mean over the batch is taken. Default: 'mean'
     """
-    if not acts.is_cuda:
-        acts = torch.nn.functional.log_softmax(acts, -1)
 
+    # NOTE manually done log_softmax for CPU version,
+    # log_softmax is computed within GPU version.
+    acts = torch.nn.functional.log_softmax(acts, -1)
     return _RNNT.apply(acts, labels, act_lens, label_lens, blank, reduction)
 
 
@@ -96,11 +103,10 @@ class RNNTLoss(Module):
         act_lens: Tensor of size (batch) containing size of each output sequence from the network
         label_lens: Tensor of (batch) containing label length of each example
         """
-        if not acts.is_cuda:
-            # NOTE manually done log_softmax for CPU version,
-            # log_softmax is computed within GPU version.
-            acts = torch.nn.functional.log_softmax(acts, -1)
 
+        # NOTE manually done log_softmax for CPU version,
+        # log_softmax is computed within GPU version.
+        acts = torch.nn.functional.log_softmax(acts, -1)
         return self.loss(acts, labels, act_lens, label_lens, self.blank, self.reduction)
 
 
