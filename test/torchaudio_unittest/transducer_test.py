@@ -188,10 +188,7 @@ def numpy_to_torch(data, device, requires_grad=True):
     src_lengths = torch.from_numpy(data["src_lengths"])
     tgt_lengths = torch.from_numpy(data["tgt_lengths"])
 
-    logits = torch.autograd.Variable(logits, requires_grad=requires_grad)
-    src_lengths = torch.autograd.Variable(src_lengths)
-    tgt_lengths = torch.autograd.Variable(tgt_lengths)
-    targets = torch.autograd.Variable(targets)
+    logits.requires_grad_(requires_grad)
 
     logits = logits.to(device)
 

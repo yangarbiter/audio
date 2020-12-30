@@ -32,5 +32,16 @@ return cpu_rnnt(acts,
 }
 
 TORCH_LIBRARY(warprnnt_pytorch_warp_rnnt, m) {
-    m.def("cpu_rnnt", &cpu_rnnt_torchbind);
+    m.def("rnnt(Tensor acts,"
+               "Tensor labels,"
+               "Tensor input_lengths,"
+               "Tensor label_lengths,"
+               "Tensor costs,"
+               "Tensor grads,"
+               "int blank_label,"
+               "int num_threads) -> int");
+}
+
+TORCH_LIBRARY_IMPL(warprnnt_pytorch_warp_rnnt, CPU, m) {
+    m.impl("rnnt", &cpu_rnnt_torchbind);
 }

@@ -21,20 +21,15 @@ class _RNNT(Function):
         device = acts.device
         certify_inputs(acts, labels, act_lens, label_lens)
 
-        if acts.is_cuda:
-            acts = acts.to("cpu")
-            acts.requires_grad = True
-            labels = labels.to("cpu")
-            act_lens = act_lens.to("cpu")
-            label_lens = label_lens.to("cpu")
 
-            loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.cpu_rnnt
-        else:
-            loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.cpu_rnnt
+        acts = acts.to("cpu")
+        labels = labels.to("cpu")
+        act_lens = act_lens.to("cpu")
+        label_lens = label_lens.to("cpu")
 
-        grads = (
-            torch.zeros_like(acts) if acts.requires_grad else torch.zeros(0).to(acts)
-        )
+        loss_func = torch.ops.warprnnt_pytorch_warp_rnnt.rnnt
+
+        grads = torch.zeros_like(acts)
         minibatch_size = acts.size(0)
         costs = torch.zeros(minibatch_size, dtype=acts.dtype)
 
