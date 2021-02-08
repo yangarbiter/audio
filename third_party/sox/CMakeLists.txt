@@ -10,7 +10,7 @@ set(COMMON_ARGS --quiet --disable-shared --enable-static --prefix=${INSTALL_DIR}
 # We constrcut the custom environment variables here
 set(envs
   "PKG_CONFIG_PATH=${INSTALL_DIR}/lib/pkgconfig"
-  "LDFLAGS=-L${INSTALL_DIR}/lib $ENV{LDFLAGS}"
+  "LDFLAGS=-L${INSTALL_DIR}/lib -lrt $ENV{LDFLAGS}"
   "CFLAGS=-I${INSTALL_DIR}/include -fvisibility=hidden $ENV{CFLAGS}"
 )
 
