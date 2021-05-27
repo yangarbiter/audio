@@ -26,11 +26,11 @@ def compute_with_numpy_transducer(data):
     return costs, gradients
 
 
-def compute_with_pytorch_transducer(data, reuse_logits_for_grads=False):
+def compute_with_pytorch_transducer(data):
     costs = RNNTLoss(
         blank=data["blank"],
         fused_log_softmax=data.get("fused_log_softmax", True),
-        reuse_logits_for_grads=reuse_logits_for_grads,
+        reuse_logits_for_grads=data.get("reuse_logits_for_grads", False),
     )(
         logits=data["logits"],
         logit_lengths=data["logit_lengths"],
