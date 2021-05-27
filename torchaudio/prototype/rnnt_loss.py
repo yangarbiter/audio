@@ -15,7 +15,7 @@ def rnnt_loss(
     blank: int = -1,
     clamp: float = -1,
     fused_log_softmax: bool = True,
-    reuse_logits_for_grads: bool = True,
+    reuse_logits_for_grads: bool = False,
 ):
     """
     Compute the RNN Transducer Loss.
@@ -33,13 +33,12 @@ def rnnt_loss(
         clamp (float): clamp for gradients (Default: ``-1``)
         runtime_check (bool): whether to do sanity check during runtime. (Default: ``False``)
         fused_log_softmax (bool): set to False if calling log_softmax outside loss (Default: ``True``)
-        reuse_logits_for_grads (bool): whether to save memory by reusing logits memory for grads (Default: ``True``)
+        reuse_logits_for_grads (bool): whether to save memory by reusing logits memory for grads (Default: ``False``)
     """
     if not fused_log_softmax:
         logits = torch.nn.functional.log_softmax(logits, dim=-1)
-        reuse_logits_for_grads = (
-            False  # softmax needs the original logits value
-        )
+        # softmax needs the original logits value
+        assert not reuse_logits_for_grads, "fused_log_softmax=True requires reuse_logits_for_grads=False"
 
     if blank < 0:  # reinterpret blank index if blank < 0.
         blank = logits.shape[-1] + blank
@@ -69,7 +68,7 @@ class RNNTLoss(torch.nn.Module):
         blank (int, opt): blank label (Default: ``-1``)
         clamp (float): clamp for gradients (Default: ``-1``)
         fused_log_softmax (bool): set to False if calling log_softmax outside loss (Default: ``True``)
-        reuse_logits_for_grads (bool): whether to save memory by reusing logits memory for grads (Default: ``True``)
+        reuse_logits_for_grads (bool): whether to save memory by reusing logits memory for grads (Default: ``False``)
     """
 
     def __init__(
@@ -77,7 +76,7 @@ class RNNTLoss(torch.nn.Module):
         blank: int = -1,
         clamp: float = -1.,
         fused_log_softmax: bool = True,
-        reuse_logits_for_grads: bool = True,
+        reuse_logits_for_grads: bool = False,
     ):
         super().__init__()
         self.blank = blank

@@ -14,7 +14,7 @@ std::tuple<torch::Tensor, c10::optional<torch::Tensor>> compute(
     int64_t blank,
     double clamp,
     bool fused_log_smax = true,
-    bool reuse_logits_for_grads = true) {
+    bool reuse_logits_for_grads = false) {
   TORCH_CHECK(
       logits.device().type() == targets.device().type(),
       "logits and targets must be on the same device");

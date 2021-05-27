@@ -432,7 +432,8 @@ def numpy_to_torch(data, device, requires_grad=True):
     def grad_hook(grad):
         logits.saved_grad = grad.clone()
 
-    logits.register_hook(grad_hook)
+    if requires_grad:
+        logits.register_hook(grad_hook)
 
     data["logits"] = logits
     data["logit_lengths"] = logit_lengths
