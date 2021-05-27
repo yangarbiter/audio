@@ -18,6 +18,9 @@ class RNNTLossFunction : public torch::autograd::Function<RNNTLossFunction> {
       bool reuse_logits_for_grads = false) {
     at::AutoNonVariableTypeMode g;
     torch::Tensor undef;
+    if (reuse_logits_for_grads) {
+        ctx->mark_dirty({logits});
+    }
     auto result = rnnt_loss(
         logits,
         targets,
