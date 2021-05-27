@@ -27,7 +27,7 @@ HOST_AND_DEVICE void ComputeGradientsElement(
     const CAST_DTYPE* betas,
     DTYPE* gradients,
     int H = 1,
-    bool fusedLogSmax = true) {
+    bool fusedLogSmax = false) {
   const int& maxT = maxSrcLen;
   const int& maxU = maxTgtLen;
   const int& D = numTargets;

@@ -8,7 +8,7 @@ std::tuple<torch::Tensor, c10::optional<torch::Tensor>> rnnt_loss(
     const torch::Tensor& tgt_lengths,
     int64_t blank,
     double clamp,
-    bool fused_log_smax = true,
+    bool fused_log_smax = false,
     bool reuse_logits_for_grads = false) {
   static auto op = torch::Dispatcher::singleton()
                        .findSchemaOrThrow("torchaudio::rnnt_loss", "")
@@ -32,6 +32,6 @@ TORCH_LIBRARY_FRAGMENT(torchaudio, m) {
       "Tensor tgt_lengths,"
       "int blank,"
       "float clamp,"
-      "bool fused_log_smax=True,"
+      "bool fused_log_smax=False,"
       "bool reuse_logits_for_grads=False) -> (Tensor, Tensor?)");
 }

@@ -24,7 +24,7 @@ __global__ void ComputeLogProbs(
     const CAST_DTYPE* denominators,
     CAST_DTYPE* logProbs,
     int H = 1,
-    bool fusedLogSmax = true) {
+    bool fusedLogSmax = false) {
   const int& maxT = maxSrcLen;
   const int& maxU = maxTgtLen;
   const int& D = numTargets;

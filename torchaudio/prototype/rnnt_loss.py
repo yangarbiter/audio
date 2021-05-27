@@ -14,7 +14,7 @@ def rnnt_loss(
     target_lengths: Tensor,
     blank: int = -1,
     clamp: float = -1,
-    fused_log_softmax: bool = True,
+    fused_log_softmax: bool = False,
     reuse_logits_for_grads: bool = False,
 ):
     """
@@ -32,7 +32,7 @@ def rnnt_loss(
         blank (int, opt): blank label (Default: ``-1``)
         clamp (float): clamp for gradients (Default: ``-1``)
         runtime_check (bool): whether to do sanity check during runtime. (Default: ``False``)
-        fused_log_softmax (bool): set to False if calling log_softmax outside loss (Default: ``True``)
+        fused_log_softmax (bool): set to False if calling log_softmax outside loss (Default: ``False``)
         reuse_logits_for_grads (bool): whether to save memory by reusing logits memory for grads (Default: ``False``)
     """
     if not fused_log_softmax:
@@ -67,7 +67,7 @@ class RNNTLoss(torch.nn.Module):
     Args:
         blank (int, opt): blank label (Default: ``-1``)
         clamp (float): clamp for gradients (Default: ``-1``)
-        fused_log_softmax (bool): set to False if calling log_softmax outside loss (Default: ``True``)
+        fused_log_softmax (bool): set to False if calling log_softmax outside loss (Default: ``False``)
         reuse_logits_for_grads (bool): whether to save memory by reusing logits memory for grads (Default: ``False``)
     """
 
@@ -75,7 +75,7 @@ class RNNTLoss(torch.nn.Module):
         self,
         blank: int = -1,
         clamp: float = -1.,
-        fused_log_softmax: bool = True,
+        fused_log_softmax: bool = False,
         reuse_logits_for_grads: bool = False,
     ):
         super().__init__()

@@ -14,7 +14,7 @@ class RNNTLossFunction : public torch::autograd::Function<RNNTLossFunction> {
       const torch::Tensor& tgt_lengths,
       int64_t blank,
       double clamp,
-      bool fused_log_smax = true,
+      bool fused_log_smax = false,
       bool reuse_logits_for_grads = false) {
     at::AutoNonVariableTypeMode g;
     torch::Tensor undef;
@@ -55,7 +55,7 @@ std::tuple<torch::Tensor, c10::optional<torch::Tensor>> rnnt_loss_autograd(
     const torch::Tensor& tgt_lengths,
     int64_t blank,
     double clamp,
-    bool fused_log_smax = true,
+    bool fused_log_smax = false,
     bool reuse_logits_for_grads = false) {
   auto results = RNNTLossFunction::apply(
       logits,
