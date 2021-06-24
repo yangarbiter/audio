@@ -1,8 +1,11 @@
-from typing import List, Tuple
+from typing import List, Tuple, Any
 
 import torch
 from torch import Tensor
 from torch import nn
+
+from ._utils import load_state_dict_from_url
+
 
 __all__ = [
     "ResBlock",
@@ -10,7 +13,13 @@ __all__ = [
     "Stretch2d",
     "UpsampleNetwork",
     "WaveRNN",
+    "wavernn",
 ]
+
+
+model_urls = {
+    'wavernn': 'https://download.pytorch.org/models/audio/wavernn_10k_epochs_8bits_ljspeech.pth',
+}
 
 
 class ResBlock(nn.Module):
@@ -208,7 +217,7 @@ class WaveRNN(nn.Module):
 
     Args:
         upsample_scales: the list of upsample scales.
-        n_classes: the number of output classes.
+        n_classes: the number of ouwput classes.
         hop_length: the number of samples between the starts of consecutive frames.
         n_res_block: the number of ResBlock in stack. (Default: ``10``)
         n_rnn: the dimension of RNN layer. (Default: ``512``)
@@ -324,3 +333,35 @@ class WaveRNN(nn.Module):
 
         # bring back channel dimension
         return x.unsqueeze(1)
+
+
+def wavernn(pretrained: bool = True, progress: bool = True, **kwargs: Any) -> WaveRNN:
+    r"""WaveRNN model based on the implementation from
+    `fatchord <https://github.com/fatchord/WaveRNN>`_.
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on LJSpeech
+        progress (bool): If True, displays a progress bar of the download to stderr
+    """
+    if pretrained:
+        n_bits = 8
+        configs = {
+            'upsample_scales': [4, 8, 8],
+            'n_classes': 2 ** n_bits,
+            'hop_length': 275,
+            'n_res_block': 10,
+            'n_rnn': 512,
+            'n_fc': 512,
+            'kernel_size': 5,
+            'n_freq': 80,
+            'n_hidden': 128,
+            'n_output': 128
+        }
+        configs.update(kwargs)
+    else:
+        configs = kwargs
+    model = WaveRNN(**configs)
+    if pretrained:
+        state_dict = load_state_dict_from_url(model_urls['wavernn'],
+                                              progress=progress)
+        model.load_state_dict(state_dict)
+    return model
