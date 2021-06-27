@@ -8,8 +8,6 @@ from torch.utils.data.dataset import random_split
 from torchaudio.datasets import LJSPEECH, LIBRITTS
 
 from text import text_to_sequence
-from common.stft import STFT
-from common.layers import TacotronSTFT
 
 
 class MapMemoryCache(torch.utils.data.Dataset):
@@ -74,82 +72,6 @@ def split_process_dataset(dataset, file_path, val_ratio, transforms):
     val_dataset = MapMemoryCache(val_dataset)
 
     return train_dataset, val_dataset
-
-
-def load_wav_to_torch(full_path):
-    sampling_rate, data = read(full_path)
-    return torch.FloatTensor(data.astype(np.float32)), sampling_rate
-
-
-def load_filepaths_and_text(dataset_path, filename, split="|"):
-    with open(filename, encoding='utf-8') as f:
-        def split_line(root, line):
-            parts = line.strip().split(split)
-            if len(parts) > 2:
-                raise Exception(
-                    "incorrect line format for file: {}".format(filename))
-            path = os.path.join(root, parts[0])
-            text = parts[1]
-            return path,text
-        filepaths_and_text = [split_line(dataset_path, line) for line in f]
-    return filepaths_and_text
-
-
-class TextMelLoader(torch.utils.data.Dataset):
-    """
-        1) loads audio,text pairs
-        2) normalizes text and converts them to sequences of one-hot vectors
-        3) computes mel-spectrograms from audio files.
-    """
-    def __init__(self, dataset_path, audiopaths_and_text, args):
-        self.audiopaths_and_text = load_filepaths_and_text(dataset_path, audiopaths_and_text)
-        self.text_cleaners = args.text_cleaners
-        self.max_wav_value = args.max_wav_value
-        self.sample_rate = args.sample_rate
-        self.load_mel_from_disk = args.load_mel_from_disk
-        self.stft = TacotronSTFT(
-            args.n_fft, args.hop_length, args.win_length,
-            args.n_mels, args.sample_rate, args.mel_fmin,
-            args.mel_fmax)
-        random.seed(1234)
-        random.shuffle(self.audiopaths_and_text)
-
-    def get_mel_text_pair(self, audiopath_and_text):
-        # separate filename and text
-        audiopath, text = audiopath_and_text[0], audiopath_and_text[1]
-        len_text = len(text)
-        text = self.get_text(text)
-        mel = self.get_mel(audiopath)
-        return (text, mel, len_text)
-
-    def get_mel(self, filename):
-        if not self.load_mel_from_disk:
-            audio, sampling_rate = load_wav_to_torch(filename)
-            if sampling_rate != self.stft.sampling_rate:
-                raise ValueError("{} {} SR doesn't match target {} SR".format(
-                    sampling_rate, self.stft.sampling_rate))
-            audio_norm = audio / self.max_wav_value
-            audio_norm = audio_norm.unsqueeze(0)
-            audio_norm = torch.autograd.Variable(audio_norm, requires_grad=False)
-            melspec = self.stft.mel_spectrogram(audio_norm)
-            melspec = torch.squeeze(melspec, 0)
-        else:
-            melspec = torch.load(filename)
-            assert melspec.size(0) == self.stft.n_mel_channels, (
-                'Mel dimension mismatch: given {}, expected {}'.format(
-                    melspec.size(0), self.stft.n_mel_channels))
-
-        return melspec
-
-    def get_text(self, text):
-        text_norm = torch.IntTensor(text_to_sequence(text, self.text_cleaners))
-        return text_norm
-
-    def __getitem__(self, index):
-        return self.get_mel_text_pair(self.audiopaths_and_text[index])
-
-    def __len__(self):
-        return len(self.audiopaths_and_text)
 
 
 class TextMelCollate():

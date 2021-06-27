@@ -19,11 +19,10 @@ from torchaudio.models.tacotron2 import Tacotron2
 #amp.lists.functional_overrides.FP32_FUNCS.remove('softmax')
 #amp.lists.functional_overrides.FP16_FUNCS.append('softmax')
 
-from datasets import TextMelCollate, split_process_dataset, TextMelLoader
+from datasets import TextMelCollate, split_process_dataset
 from utils import save_checkpoint
 
 from loss_function import Tacotron2Loss
-from processing import NormalizeDB
 
 
 logging.basicConfig(level=logging.INFO)
@@ -68,10 +67,10 @@ def parse_args(parser):
                           help='Number of epochs per checkpoint')
     training.add_argument('--checkpoint-path', type=str, default='',
                           help='Checkpoint path to resume training')
-    training.add_argument('--resume-from-last', action='store_true',
-                          help='Resumes training from the last checkpoint; uses the directory provided with \'--output\' option to search for the checkpoint \"checkpoint_<model_name>_last.pt\"')
-    training.add_argument('--dynamic-loss-scaling', type=bool, default=True,
-                          help='Enable dynamic loss scaling')
+    #training.add_argument('--resume-from-last', action='store_true',
+    #                      help='Resumes training from the last checkpoint; uses the directory provided with \'--output\' option to search for the checkpoint \"checkpoint_<model_name>_last.pt\"')
+    #training.add_argument('--dynamic-loss-scaling', type=bool, default=True,
+    #                      help='Enable dynamic loss scaling')
     #training.add_argument('--amp', action='store_true',
     #                      help='Enable AMP')
     training.add_argument('--workers', default=8, type=int, help='')
@@ -82,12 +81,12 @@ def parse_args(parser):
         metavar="N",
         help="print frequency in epochs",
     )
-    training.add_argument('--cudnn-enabled', action='store_true',
-                          help='Enable cudnn')
-    training.add_argument('--cudnn-benchmark', action='store_true',
-                          help='Run cudnn benchmark')
-    training.add_argument('--disable-uniform-initialize-bn-weight', action='store_true',
-                          help='disable uniform initialization of batchnorm layer weight')
+    #training.add_argument('--cudnn-enabled', action='store_true',
+    #                      help='Enable cudnn')
+    #training.add_argument('--cudnn-benchmark', action='store_true',
+    #                      help='Run cudnn benchmark')
+    #training.add_argument('--disable-uniform-initialize-bn-weight', action='store_true',
+    #                      help='disable uniform initialization of batchnorm layer weight')
 
     optimization = parser.add_argument_group('optimization setup')
     optimization.add_argument('--use-saved-learning-rate', default=False, type=bool)
@@ -104,14 +103,14 @@ def parse_args(parser):
 
     # dataset parameters
     dataset = parser.add_argument_group('dataset parameters')
-    dataset.add_argument('--load-mel-from-disk', action='store_true',
-                         help='Loads mel spectrograms from disk instead of computing them on the fly')
-    dataset.add_argument('--training-files',
-                         default='filelists/ljs_audio_text_train_filelist.txt',
-                         type=str, help='Path to training filelist')
-    dataset.add_argument('--validation-files',
-                         default='filelists/ljs_audio_text_val_filelist.txt',
-                         type=str, help='Path to validation filelist')
+    #dataset.add_argument('--load-mel-from-disk', action='store_true',
+    #                     help='Loads mel spectrograms from disk instead of computing them on the fly')
+    #dataset.add_argument('--training-files',
+    #                     default='filelists/ljs_audio_text_train_filelist.txt',
+    #                     type=str, help='Path to training filelist')
+    #dataset.add_argument('--validation-files',
+    #                     default='filelists/ljs_audio_text_val_filelist.txt',
+    #                     type=str, help='Path to validation filelist')
     dataset.add_argument('--text-cleaners', nargs='*',
                          default=['english_cleaners'], type=str,
                          help='Type of text cleaners for input text')
@@ -246,14 +245,6 @@ def run(rank, world_size, args):
     trainset, valset = split_process_dataset(
         args.dataset, args.dataset_path, args.val_ratio, transforms)
 
-    #trainset_old = TextMelLoader(args.dataset_path, args.training_files, args)
-    #valset = TextMelLoader(args.dataset_path, args.validation_files, args)
-
-    #print(trainset[3025])
-    #print(trainset_old[931])
-
-    import ipdb; ipdb.set_trace()
-
     train_sampler = torch.utils.data.distributed.DistributedSampler(
         trainset,
         num_replicas=world_size,
@@ -264,7 +255,6 @@ def run(rank, world_size, args):
         num_replicas=world_size,
         rank=rank
     )
-
 
     collate_fn = TextMelCollate(n_frames_per_step=1)
     loader_params = {
