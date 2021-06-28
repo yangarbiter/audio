@@ -3,8 +3,11 @@ https://github.com/NVIDIA/DeepLearningExamples/blob/master/PyTorch/SpeechSynthes
 """
 import argparse
 from datetime import datetime
+from functools import partial
 import logging
+import random
 import os
+from time import time
 
 import torch
 import torchaudio
@@ -13,19 +16,21 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 from torchaudio.models.tacotron2 import Tacotron2
+from tqdm import tqdm
 
 # https://github.com/NVIDIA/apex
-#from apex import amp
-#amp.lists.functional_overrides.FP32_FUNCS.remove('softmax')
-#amp.lists.functional_overrides.FP16_FUNCS.append('softmax')
+# from apex import amp
+# amp.lists.functional_overrides.FP32_FUNCS.remove('softmax')
+# amp.lists.functional_overrides.FP16_FUNCS.append('softmax')
 
-from datasets import TextMelCollate, split_process_dataset
+from datasets import text_mel_collate_fn, split_process_dataset, SpectralNormalization
 from utils import save_checkpoint
 
 from loss_function import Tacotron2Loss
 
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
+                    level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S')
 logger = logging.getLogger(os.path.basename(__file__))
 
 
@@ -34,8 +39,6 @@ def parse_args(parser):
     Parse commandline arguments.
     """
 
-    #parser.add_argument('-o', '--output', type=str, required=True,
-    #                    help='Directory to save checkpoints')
     parser.add_argument(
         "--dataset",
         default="ljspeech",
@@ -45,8 +48,6 @@ def parse_args(parser):
     )
     parser.add_argument('-d', '--dataset-path', type=str,
                         default='./', help='Path to dataset')
-    parser.add_argument('--log-file', type=str, default='log.json',
-                        help='Filename for logging')
     parser.add_argument(
         "--val-ratio",
         default=0.1,
@@ -63,12 +64,10 @@ def parse_args(parser):
     training = parser.add_argument_group('training setup')
     training.add_argument('--epochs', type=int, required=True,
                           help='Number of total epochs to run')
-    training.add_argument('--epochs-per-checkpoint', type=int, default=50,
-                          help='Number of epochs per checkpoint')
     training.add_argument('--checkpoint-path', type=str, default='',
                           help='Checkpoint path to resume training')
-    #training.add_argument('--resume-from-last', action='store_true',
-    #                      help='Resumes training from the last checkpoint; uses the directory provided with \'--output\' option to search for the checkpoint \"checkpoint_<model_name>_last.pt\"')
+    training.add_argument('--epochs-per-checkpoint', type=int, default=50,
+                          help='Number of epochs per checkpoint')
     #training.add_argument('--dynamic-loss-scaling', type=bool, default=True,
     #                      help='Enable dynamic loss scaling')
     #training.add_argument('--amp', action='store_true',
@@ -81,15 +80,8 @@ def parse_args(parser):
         metavar="N",
         help="print frequency in epochs",
     )
-    #training.add_argument('--cudnn-enabled', action='store_true',
-    #                      help='Enable cudnn')
-    #training.add_argument('--cudnn-benchmark', action='store_true',
-    #                      help='Run cudnn benchmark')
-    #training.add_argument('--disable-uniform-initialize-bn-weight', action='store_true',
-    #                      help='disable uniform initialization of batchnorm layer weight')
 
     optimization = parser.add_argument_group('optimization setup')
-    optimization.add_argument('--use-saved-learning-rate', default=False, type=bool)
     optimization.add_argument('-lr', '--learning-rate', type=float, required=True,
                               help='Learing rate')
     optimization.add_argument('--weight-decay', default=1e-6, type=float,
@@ -103,22 +95,12 @@ def parse_args(parser):
 
     # dataset parameters
     dataset = parser.add_argument_group('dataset parameters')
-    #dataset.add_argument('--load-mel-from-disk', action='store_true',
-    #                     help='Loads mel spectrograms from disk instead of computing them on the fly')
-    #dataset.add_argument('--training-files',
-    #                     default='filelists/ljs_audio_text_train_filelist.txt',
-    #                     type=str, help='Path to training filelist')
-    #dataset.add_argument('--validation-files',
-    #                     default='filelists/ljs_audio_text_val_filelist.txt',
-    #                     type=str, help='Path to validation filelist')
     dataset.add_argument('--text-cleaners', nargs='*',
                          default=['english_cleaners'], type=str,
                          help='Type of text cleaners for input text')
 
     # audio parameters
     audio = parser.add_argument_group('audio parameters')
-    #audio.add_argument('--max-wav-value', default=32768.0, type=float,
-    #                   help='Maximum audiowave value')
     audio.add_argument('--sample-rate', default=22050, type=int, # sampling rate
                        help='Sampling rate')
     audio.add_argument('--n-fft', default=1024, type=int, # filter_length
@@ -143,15 +125,12 @@ def adjust_learning_rate(epoch, optimizer, learning_rate,
     if anneal_steps is not None:
         for _, a_step in enumerate(anneal_steps):
             if epoch >= int(a_step):
-                p = p+1
+                p = p + 1
 
     if anneal_factor == 0.3:
-        lr = learning_rate*((0.1 ** (p//2))*(1.0 if p % 2 == 0 else 0.3))
+        lr = learning_rate * ((0.1 ** (p // 2)) * (1.0 if p % 2 == 0 else 0.3))
     else:
-        lr = learning_rate*(anneal_factor ** p)
-
-    #if optimizer.param_groups[0]['lr'] != lr:
-    #    logging.info(step=(epoch, iteration), data={'learning_rate changed': str(optimizer.param_groups[0]['lr'])+" -> "+str(lr)})
+        lr = learning_rate * (anneal_factor ** p)
 
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
@@ -169,37 +148,46 @@ def batch_to_gpu(batch):
         output_lengths = batch
     text_padded = to_gpu(text_padded).long()
     input_lengths = to_gpu(input_lengths).long()
-    max_len = torch.max(input_lengths.data).item()
     mel_padded = to_gpu(mel_padded).float()
     gate_padded = to_gpu(gate_padded).float()
     output_lengths = to_gpu(output_lengths).long()
-    x = (text_padded, input_lengths, mel_padded, max_len, output_lengths)
+    x = (text_padded, input_lengths, mel_padded, output_lengths)
     y = (mel_padded, gate_padded)
     return x, y
 
 
 def training_step(model, train_batch, batch_idx):
-    x, y = batch_to_gpu(train_batch)
-    y_pred = model(x)
-    loss = Tacotron2Loss()(y_pred, y)
+    (text_padded, input_lengths, mel_padded, output_lengths), y = batch_to_gpu(train_batch)
+    y_pred = model(text_padded, input_lengths, mel_padded, output_lengths)
+    loss = Tacotron2Loss(reduction="mean")(y_pred, y)
     return loss
 
 
 def validation_step(model, val_batch, batch_idx):
-    x, y = batch_to_gpu(val_batch)
-    y_pred = model(x)
+    (text_padded, input_lengths, mel_padded, output_lengths), y = batch_to_gpu(val_batch)
+    y_pred = model(text_padded, input_lengths, mel_padded, output_lengths)
     loss = Tacotron2Loss(reduction="sum")(y_pred, y)
     return loss
 
 
 def run(rank, world_size, args):
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
-    logger.info(f"[rank: {rank}] in")
+    logger.info(f"[Rank: {rank}] in")
 
     torch.manual_seed(0)
 
     torch.cuda.set_device(rank)
-    model = Tacotron2().cuda(rank)
+
+    n_frames_per_step = 1
+
+    model = Tacotron2(
+        mask_padding=False,
+        n_mels=args.n_mels,
+        n_symbols=148,  # len(text.symbols.symbols)
+        symbols_embedding_dim=512,
+        n_frames_per_step=n_frames_per_step,
+    ).cuda(rank)
+    model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
 
     optimizer = Adam(model.parameters(), lr=args.learning_rate)
@@ -222,10 +210,6 @@ def run(rank, world_size, args):
             f"Checkpoint: loaded '{args.checkpoint_path}' at epoch {checkpoint['epoch']}"
         )
 
-    class SpectralNormalization(torch.nn.Module):
-        def forward(self, input):
-            return torch.log(torch.clamp(input, min=1e-5))
-
     transforms = torch.nn.Sequential(
         torchaudio.transforms.MelSpectrogram(
             n_fft=args.n_fft,
@@ -247,34 +231,38 @@ def run(rank, world_size, args):
 
     train_sampler = torch.utils.data.distributed.DistributedSampler(
         trainset,
+        shuffle=True,
         num_replicas=world_size,
-        rank=rank
-    )
-    val_sampler = torch.utils.data.distributed.DistributedSampler(
-        valset,
-        num_replicas=world_size,
-        rank=rank
+        rank=rank,
     )
 
-    collate_fn = TextMelCollate(n_frames_per_step=1)
     loader_params = {
         "batch_size": args.batch_size,
         "num_workers": args.workers,
+        "shuffle": False,
         "pin_memory": False,
         "drop_last": False,
-        "collate_fn": collate_fn,
+        "collate_fn": partial(text_mel_collate_fn, n_frames_per_step=n_frames_per_step),
     }
 
-    train_loader = DataLoader(trainset, shuffle=False, sampler=train_sampler, **loader_params)
-    val_loader = DataLoader(valset, shuffle=False, sampler=val_sampler, **loader_params)
-    if world_size > 1:
-        dist.barrier()
+    train_loader = DataLoader(trainset, sampler=train_sampler, **loader_params)
+    val_loader = DataLoader(valset, **loader_params)
+    dist.barrier()
 
     for epoch in range(start_epoch, args.epochs):
-        logger.info(f"[rank: {rank}] Epoch: {epoch}")
+        logger.info(f"[rank: {rank}, Epoch: {epoch}] start")
+        start = time()
+
         model.train()
         trn_loss, counts = 0, 0
-        for i, batch in enumerate(train_loader):
+
+        if rank == 0:
+            iterator = tqdm(enumerate(train_loader), desc=f"Epoch {epoch}", total=len(train_loader))
+        else:
+            iterator = enumerate(train_loader)
+        for i, batch in iterator:
+            if 'CUBLAS_WORKSPACE_CONFIG' in os.environ and i == 2:
+                break
             adjust_learning_rate(epoch, optimizer, args.learning_rate,
                                  args.anneal_steps, args.anneal_factor)
 
@@ -291,36 +279,53 @@ def run(rank, world_size, args):
             trn_loss += loss.item() * len(batch[0])
             counts += len(batch[0])
 
-        logger.info(f"[Epoch: {epoch}] trn_loss: {trn_loss}")
+        logger.info(f"[Rank: {rank}, Epoch: {epoch}] time: {time()-start}; trn_loss: {trn_loss}")
 
-        if rank == 0 and (not (epoch + 1) % args.print_freq or epoch == args.epochs - 1):
+        if ((epoch + 1) % args.print_freq == 0) or (epoch == args.epochs - 1):
+
+            if 'CUBLAS_WORKSPACE_CONFIG' in os.environ:
+                break
+
+            val_start_time = time()
             model.eval()
-            val_loss, counts = 0, 0
-            for val_batch_idx, val_batch in enumerate(val_loader):
-                val_loss += validation_step(model, val_batch, val_batch_idx).item()
-                counts += len(val_batch[0])
-            val_loss /= counts
+            with torch.no_grad():
+                val_loss, counts = 0, 0
+                iterator = tqdm(enumerate(val_loader), desc=f"[Eval Epoch: {epoch}]", total=len(val_loader))
+                for val_batch_idx, val_batch in iterator:
+                    val_loss = val_loss + validation_step(model, val_batch, val_batch_idx).item()
+                    counts = counts + len(val_batch[0])
+                val_loss = val_loss / counts
 
-            is_best = val_loss < best_loss
-            best_loss = min(val_loss, best_loss)
-            logger.info(f"[Rank: {rank, }Epoch: {epoch}] Saving checkpoint to {args.checkpoint_path}")
-            save_checkpoint(
-                {
-                    "epoch": epoch + 1,
-                    "state_dict": model.state_dict(),
-                    "best_loss": best_loss,
-                    "optimizer": optimizer.state_dict(),
-                },
-                is_best,
-                args.checkpoint_path,
-            )
+            logger.info(f"[Epoch: {epoch}; Eval] time: {time()-val_start_time}; val_loss: {val_loss}")
 
-            logger.info(f"[Epoch: {epoch}] val_loss: {val_loss}")
-    
+            if rank == 0:
+                is_best = val_loss < best_loss
+                best_loss = min(val_loss, best_loss)
+                logger.info(f"[Rank: {rank}, Epoch: {epoch}] Saving checkpoint to {args.checkpoint_path}")
+                save_checkpoint(
+                    {
+                        "epoch": epoch + 1,
+                        "state_dict": model.state_dict(),
+                        "best_loss": best_loss,
+                        "optimizer": optimizer.state_dict(),
+                    },
+                    is_best,
+                    args.checkpoint_path,
+                )
+
     dist.destroy_process_group()
+    if rank == 0:
+        return model
+
 
 def main(args):
     logger.info("Start time: {}".format(str(datetime.now())))
+
+    torch.manual_seed(0)
+    random.seed(0)
+
+    if 'CUBLAS_WORKSPACE_CONFIG' in os.environ:
+        torch.use_deterministic_algorithms(True)
 
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '17778'
@@ -333,12 +338,21 @@ def main(args):
     logger.info(f"# available GPUs: {device_counts}")
 
     if device_counts == 1:
-        run(0, 1, args)
+        tacotron2 = run(0, 1, args)
     else:
-        mp.spawn(run, args=(device_counts, args, ), nprocs=device_counts)
+        tacotron2 = mp.spawn(run, args=(device_counts, args, ), nprocs=device_counts, join=True)
 
+    if 'CUBLAS_WORKSPACE_CONFIG' in os.environ:
+        from numpy.testing import assert_equal
+        # [Rank: 0, Epoch: 0] time: 6.493569612503052; trn_loss: 1394.7091064453125
+        baseline_state_dict = torch.load("./test_ckpt.pth")['state_dict']
+        state_dict = tacotron2.state_dict()
+        for k, v in state_dict.items():
+            assert_equal(v.cpu().numpy(), baseline_state_dict[k].cpu().numpy())
+
+    print("[train] Correct!")
     logger.info(f"End time: {datetime.now()}")
-
+    exit()
 
 
 if __name__ == '__main__':

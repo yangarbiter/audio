@@ -25,23 +25,28 @@
 #
 # *****************************************************************************
 
-# https://github.com/NVIDIA/DeepLearningExamples/blob/master/PyTorch/SpeechSynthesis/Tacotron2/tacotron2/loss_function.py
+from typing import Tuple
 
-from torch import nn
+from torch import nn, Tensor
 
 
 class Tacotron2Loss(nn.Module):
+    """
+    Adapt from:
+    https://github.com/NVIDIA/DeepLearningExamples/blob/master/PyTorch/SpeechSynthesis/Tacotron2/tacotron2/loss_function.py
+    """
+
     def __init__(self, reduction="mean"):
         self.reduction = reduction
         super(Tacotron2Loss, self).__init__()
 
-    def forward(self, model_output, targets):
+    def forward(self, model_output: Tuple[Tensor, Tensor, Tensor], targets: Tuple[Tensor, Tensor]) -> Tensor:
         mel_target, gate_target = targets[0], targets[1]
         mel_target.requires_grad = False
         gate_target.requires_grad = False
         gate_target = gate_target.view(-1, 1)
 
-        mel_out, mel_out_postnet, gate_out, _ = model_output
+        mel_out, mel_out_postnet, gate_out = model_output
         gate_out = gate_out.view(-1, 1)
         mel_loss = nn.MSELoss(reduction=self.reduction)(mel_out, mel_target) + \
             nn.MSELoss(reduction=self.reduction)(mel_out_postnet, mel_target)

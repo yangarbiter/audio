@@ -4,8 +4,8 @@ import os
 import sys
 
 import torch
-from torch.utils.data import DataLoader
 import numpy as np
+from torchaudio.models.tacotron2 import Tacotron2
 
 from utils import prepare_input_sequence
 
@@ -51,6 +51,7 @@ def _download_checkpoint(checkpoint, force_reload):
         urllib.request.urlretrieve(checkpoint, ckpt_file)
     return ckpt_file
 
+
 def nvidia_tacotron2(pretrained=True, **kwargs):
     """Constructs a Tacotron 2 model (nn.module with additional infer(input) method).
     For detailed information on model input and output, training recipies, inference and performance
@@ -64,8 +65,6 @@ def nvidia_tacotron2(pretrained=True, **kwargs):
         p_decoder_dropout (float, 0.1): dropout probability on decoder LSTM (2nd LSTM layer in decoder)
         max_decoder_steps (int, 1000): maximum number of generated mel spectrograms during inference
     """
-
-    from torchaudio.models.tacotron2 import Tacotron2
 
     fp16 = "model_math" in kwargs and kwargs["model_math"] == "fp16"
     force_reload = "force_reload" in kwargs and kwargs["force_reload"]
@@ -111,8 +110,11 @@ def main():
     random.seed(0)
     np.random.seed(0)
 
-    tacotron2 = nvidia_tacotron2(model_math='fp16')
+    #tacotron2 = nvidia_tacotron2(model_math='fp16')
     #tacotron2 = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_tacotron2', model_math='fp16')
+
+    tacotron2 = Tacotron2()
+    tacotron2.load_state_dict(unwrap_distributed(torch.load("./ckpt.pth", map_location="cuda")['state_dict']))
     tacotron2 = tacotron2.to('cuda')
     tacotron2.eval()
 
@@ -129,7 +131,7 @@ def main():
     sequences, lengths = sequences.long().cuda(), lengths.long().cuda()
 
     with torch.no_grad():
-        mel = tacotron2.infer([sequences, lengths])
+        mel = tacotron2.infer(sequences, lengths)
         audio = waveglow.infer(mel)
     audio_numpy = audio[0].data.cpu().numpy()
     rate = 22050

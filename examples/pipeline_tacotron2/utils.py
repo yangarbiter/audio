@@ -31,7 +31,6 @@ def save_checkpoint(state, is_best, filename):
     logging.info("Checkpoint: saved")
 
 
-
 def pad_sequences(batch):
     # Right zero-pad all one-hot text sequences to max input length
     input_lengths, ids_sorted_decreasing = torch.sort(
