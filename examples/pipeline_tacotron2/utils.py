@@ -1,11 +1,31 @@
+from collections import defaultdict
 import logging
 import os
 import shutil
-from collections import defaultdict, deque
+from typing import List, Tuple
+import json
 
 import torch
+from torch import Tensor
 
 from text import text_to_sequence
+
+
+class MetricLogger(defaultdict):
+    def __init__(self, name, print_freq=1, disable=False):
+        super().__init__(lambda: 0.0)
+        self.disable = disable
+        self.print_freq = print_freq
+        self._iter = 0
+        self["name"] = name
+
+    def __str__(self):
+        return json.dumps(self)
+
+    def __call__(self):
+        self._iter = (self._iter + 1) % self.print_freq
+        if not self.disable and not self._iter:
+            print(self, flush=True)
 
 
 def save_checkpoint(state, is_best, filename):
@@ -31,7 +51,7 @@ def save_checkpoint(state, is_best, filename):
     logging.info("Checkpoint: saved")
 
 
-def pad_sequences(batch):
+def pad_sequences(batch: Tensor) -> Tuple[Tensor, Tensor]:
     # Right zero-pad all one-hot text sequences to max input length
     input_lengths, ids_sorted_decreasing = torch.sort(
         torch.LongTensor([len(x) for x in batch]),
@@ -47,10 +67,10 @@ def pad_sequences(batch):
     return text_padded, input_lengths
 
 
-def prepare_input_sequence(texts):
+def prepare_input_sequence(texts: List[str]) -> Tuple[Tensor, Tensor]:
 
     d = []
-    for i,text in enumerate(texts):
+    for text in texts:
         d.append(torch.IntTensor(
             text_to_sequence(text, ['english_cleaners'])[:]))
 

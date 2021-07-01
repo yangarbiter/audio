@@ -40,7 +40,9 @@ class Tacotron2Loss(nn.Module):
         self.reduction = reduction
         super(Tacotron2Loss, self).__init__()
 
-    def forward(self, model_output: Tuple[Tensor, Tensor, Tensor, Tensor], targets: Tuple[Tensor, Tensor]) -> Tensor:
+    def forward(self,
+                model_output: Tuple[Tensor, Tensor, Tensor, Tensor],
+                targets: Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tensor, Tensor]:
         mel_target, gate_target = targets[0], targets[1]
         mel_target.requires_grad = False
         gate_target.requires_grad = False
@@ -48,7 +50,7 @@ class Tacotron2Loss(nn.Module):
 
         mel_out, mel_out_postnet, gate_out, _ = model_output
         gate_out = gate_out.view(-1, 1)
-        mel_loss = nn.MSELoss(reduction=self.reduction)(mel_out, mel_target) + \
-            nn.MSELoss(reduction=self.reduction)(mel_out_postnet, mel_target)
+        mel_loss = nn.MSELoss(reduction=self.reduction)(mel_out, mel_target)
+        mel_postnet = nn.MSELoss(reduction=self.reduction)(mel_out_postnet, mel_target)
         gate_loss = nn.BCEWithLogitsLoss(reduction=self.reduction)(gate_out, gate_target)
-        return mel_loss + gate_loss
+        return mel_loss, mel_postnet, gate_loss

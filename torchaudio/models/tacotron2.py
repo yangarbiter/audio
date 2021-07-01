@@ -276,8 +276,8 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    """
-    attention
+    """Decoder with attention model
+    
     """
     def __init__(self, n_mels, n_frames_per_step,
                  encoder_embedding_dim, attention_dim,
@@ -474,7 +474,7 @@ class Decoder(nn.Module):
                 attention_cell, decoder_hidden, decoder_cell, attention_weights,
                 attention_weights_cum, attention_context)
 
-    def forward(self, memory, decoder_inputs, memory_lengths):
+    def forward(self, memory: Tensor, decoder_inputs: Tensor, memory_lengths: Tensor):
         """ Decoder forward pass for training
 
         Args:
@@ -538,7 +538,7 @@ class Decoder(nn.Module):
         return mel_outputs, gate_outputs, alignments
 
     @torch.jit.export
-    def infer(self, memory, memory_lengths):
+    def infer(self, memory: Tensor, memory_lengths: Tensor):
         """ Decoder inference
 
         Args:
@@ -671,7 +671,7 @@ class Tacotron2(nn.Module):
                  postnet_embedding_dim: int = 512,
                  postnet_kernel_size: int = 5,
                  postnet_n_convolutions: int = 5,
-                 decoder_no_early_stopping: bool = True) -> None:
+                 decoder_no_early_stopping: bool = False) -> None:
         super(Tacotron2, self).__init__()
 
         self.mask_padding = mask_padding
@@ -733,6 +733,7 @@ class Tacotron2(nn.Module):
             mel_specgram (Tensor): mel spectrogram before postnet (n_batch, n_mels, mel_specgram_lengths.max())
             mel_specgram_postnet (Tensor): mel spectrogram after postnet (n_batch, n_mels, mel_specgram_lengths.max())
             stop_token (Tensor): the output for stop token at each time step (n_batch, mel_specgram_lengths.max())
+            alignment (Tensor): (n_batch, mel_specgram_lengths.max(), text_lengths.max())
         """
 
         text_lengths, mel_specgram_lengths = text_lengths.data, mel_specgram_lengths.data

@@ -134,6 +134,8 @@ def main():
     audio_numpy = audio[0].data.cpu().numpy()
     rate = 22050
 
+    import ipdb; ipdb.set_trace()
+
     from scipy.io.wavfile import write, read
     write("audio.wav", rate, audio_numpy)
 

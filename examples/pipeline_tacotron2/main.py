@@ -13,6 +13,7 @@ import torch
 import torchaudio
 import torch.multiprocessing as mp
 import torch.distributed as dist
+from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 from torchaudio.models.tacotron2 import Tacotron2
@@ -47,7 +48,12 @@ def parse_args(parser):
         help="select dataset to train with",
     )
     parser.add_argument(
-        '-d',
+        '--logging-dir',
+        type=str,
+        default=None,
+        help='directory to save the log files'
+    )
+    parser.add_argument(
         '--dataset-path',
         type=str,
         default='./',
@@ -100,6 +106,13 @@ def parse_args(parser):
         metavar="N",
         help="validation frequency in epochs",
     )
+    training.add_argument(
+        "--logging-freq",
+        default=10,
+        type=int,
+        metavar="N",
+        help="validation frequency in epochs",
+    )
 
     optimization = parser.add_argument_group('optimization setup')
     optimization.add_argument(
@@ -141,46 +154,68 @@ def parse_args(parser):
 
     # model parameters
     model = parser.add_argument_group('model parameters')
-    model.add_argument('--n-frames-per-step', default=1, type=int,
-                       help='')
-    model.add_argument('--symbols-embedding-dim', default=512, type=int,
-                       help='')
+    model.add_argument(
+        '--symbols-embedding-dim',
+        default=512,
+        type=int,
+        help='input embedding dimension'
+    )
+    model.add_argument(
+        '--mask-padding',
+        action='store_true',
+        default=False,
+        help=''
+    )
+
+    # encoder
     model.add_argument('--encoder-kernel-size', default=5, type=int,
-                       help='')
+                       help='encoder kernel size')
     model.add_argument('--encoder-n-convolutions', default=3, type=int,
-                       help='')
+                       help='number of encoder convolutions')
     model.add_argument('--encoder-embedding-dim', default=512, type=int,
-                       help='')
+                       help='encoder embedding dimension')
+
+    model.add_argument('--attention-dim', default=128, type=int,
+                       help='dimension of attention hidden representation')
     model.add_argument('--attention-rnn-dim', default=1024, type=int,
-                       help='')
+                       help='number of units in attention LSTM')
     model.add_argument('--attention-location-n-filters', default=32, type=int,
-                       help='')
+                       help='number of filters for location-sensitive attention')
     model.add_argument('--attention-location-kernel-size', default=31, type=int,
-                       help='')
+                       help='kernel size for location-sensitive attention')
+    # decoder
+    model.add_argument('--n-frames-per-step', default=1, type=int,
+                       help='number of frames processed per step (currently only 1 is supported)')
     model.add_argument('--decoder-rnn-dim', default=1024, type=int,
-                       help='')
+                       help='number of units in decoder LSTM')
     model.add_argument('--prenet-dim', default=256, type=int,
-                       help='')
+                       help='number of ReLU units in prenet layers')
     model.add_argument('--max-decoder-steps', default=2000, type=int,
-                       help='')
+                       help='maximum number of output mel spectrograms')
     model.add_argument('--gate-threshold', default=0.5, type=float,
-                       help='')
+                       help='probability threshold for stop token')
     model.add_argument('--p-attention-dropout', default=0.1, type=float,
-                       help='')
+                       help='dropout probability for attention LSTM')
     model.add_argument('--p-decoder-dropout', default=0.1, type=float,
-                       help='')
+                       help='dropout probability for decoder LSTM')
+    model.add_argument(
+        '--decoder-no-early-stopping',
+        action='store_true',
+        default=False,
+        help=''
+    )
+
+    # mel-post processing network parameters
     model.add_argument('--postnet-embedding-dim', default=512, type=float,
-                       help='')
+                       help='postnet embedding dimension')
     model.add_argument('--postnet-kernel-size', default=5, type=float,
-                       help='')
-    model.add_argument('--postnet-n-convolutions', default=5, type=float,
-                       help='')
-    model.add_argument('--mask-padding', action='store_true',
-                       default=False, type=bool,
-                       help='')
-    model.add_argument('--decoder-no-early-stopping', action='store_false',
-                       default=True, type=bool,
-                       help='')
+                       help='postnet kernel size')
+    model.add_argument(
+        '--postnet-n-convolutions',
+        default=5,
+        type=float,
+        help='number of postnet convolutions'
+    )
 
     # audio parameters
     audio = parser.add_argument_group('audio parameters')
@@ -196,8 +231,12 @@ def parse_args(parser):
                        help='')
     audio.add_argument('--mel-fmin', default=0.0, type=float,
                        help='Minimum mel frequency')
-    audio.add_argument('--mel-fmax', default=8000.0, type=float,
-                       help='Maximum mel frequency')
+    audio.add_argument(
+        '--mel-fmax',
+        default=8000.0,
+        type=float,
+        help='Maximum mel frequency'
+    )
 
     return parser
 
@@ -242,20 +281,20 @@ def batch_to_gpu(batch):
 def training_step(model, train_batch, batch_idx):
     (text_padded, input_lengths, mel_padded, output_lengths), y = batch_to_gpu(train_batch)
     y_pred = model(text_padded, input_lengths, mel_padded, output_lengths)
-    loss = Tacotron2Loss(reduction="mean")(y_pred, y)
-    return loss
+    losses = Tacotron2Loss(reduction="mean")(y_pred, y)
+    return losses[0] + losses[1] + losses[2], losses
 
 
 def validation_step(model, val_batch, batch_idx):
     (text_padded, input_lengths, mel_padded, output_lengths), y = batch_to_gpu(val_batch)
     y_pred = model(text_padded, input_lengths, mel_padded, output_lengths)
-    loss = Tacotron2Loss(reduction="sum")(y_pred, y)
-    return loss
+    losses = Tacotron2Loss(reduction="mean")(y_pred, y)
+    return losses[0] + losses[1] + losses[2], losses
 
 
 def reduce_tensor(tensor, world_size):
     rt = tensor.clone()
-    dist.all_reduce(rt, op=dist.reduce_op.SUM)
+    dist.all_reduce(rt, op=dist.ReduceOp.SUM)
     if rt.is_floating_point():
         rt = rt / world_size
     else:
@@ -263,9 +302,29 @@ def reduce_tensor(tensor, world_size):
     return rt
 
 
+def log_additional_info(writer, model, loader, epoch):
+    model.eval()
+    data = next(iter(loader))
+    with torch.no_grad():
+        (text_padded, input_lengths, mel_padded, output_lengths), _ = batch_to_gpu(data)
+        y_pred = model(text_padded, input_lengths, mel_padded, output_lengths)
+        mel_out, mel_out_postnet, gate_out, alignment = y_pred
+    writer.add_image("trn/mel_out", mel_out[0], epoch, dataformats="HW")
+    writer.add_image("trn/mel_out_postnet", mel_out_postnet[0], epoch, dataformats="HW")
+    writer.add_image("trn/gate_out", torch.tile(gate_out[:1], (10, 1)), epoch, dataformats="HW")
+    writer.add_image("trn/alignment", alignment[0], epoch, dataformats="HW")
+
 def run(rank, world_size, args):
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
-    logger.info(f"[Rank: {rank}] in")
+
+    if rank == 0 and args.logging_dir:
+        filehandler = logging.FileHandler(os.path.join(args.logging_dir, 'spam.log'))
+        filehandler.setLevel(logging.INFO)
+        logger.addHandler(filehandler)
+
+        writer = SummaryWriter(log_dir=args.logging_dir)
+    else:
+        writer = None
 
     torch.manual_seed(0)
 
@@ -353,7 +412,7 @@ def run(rank, world_size, args):
         "batch_size": args.batch_size,
         "num_workers": args.workers,
         "shuffle": False,
-        "pin_memory": False,
+        "pin_memory": True,
         "drop_last": False,
         "collate_fn": partial(text_mel_collate_fn, n_frames_per_step=args.n_frames_per_step),
     }
@@ -363,7 +422,7 @@ def run(rank, world_size, args):
     dist.barrier()
 
     for epoch in range(start_epoch, args.epochs):
-        logger.info(f"[rank: {rank}, Epoch: {epoch}] start")
+        logger.info(f"[Rank: {rank}, Epoch: {epoch}] start")
         start = time()
 
         model.train()
@@ -377,11 +436,11 @@ def run(rank, world_size, args):
             if 'CUBLAS_WORKSPACE_CONFIG' in os.environ and i == 2:
                 break
             adjust_learning_rate(epoch, optimizer, args.learning_rate,
-                                 args.anneal_steps, args.anneal_factor)
+                                args.anneal_steps, args.anneal_factor)
 
             model.zero_grad()
 
-            loss = training_step(model, batch, i)
+            loss, losses = training_step(model, batch, i)
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(
@@ -389,10 +448,21 @@ def run(rank, world_size, args):
 
             optimizer.step()
 
-            trn_loss += loss.item() * len(batch[0])
+            if rank == 0 and writer:
+                global_iters = epoch * len(train_loader)
+                writer.add_scalar("trn/mel_loss", losses[0], global_iters)
+                writer.add_scalar("trn/mel_postnet_loss", losses[1], global_iters)
+                writer.add_scalar("trn/gate_loss", losses[2], global_iters)
+
+            trn_loss += loss * len(batch[0])
             counts += len(batch[0])
 
-        logger.info(f"[Rank: {rank}, Epoch: {epoch}] time: {time()-start}; trn_loss: {trn_loss/counts}")
+        trn_loss = trn_loss / counts
+        logger.info(f"[Rank: {rank}, Epoch: {epoch}] time: {time()-start}; trn_loss: {trn_loss}")
+
+        trn_loss = reduce_tensor(trn_loss, world_size)
+        if rank == 0 and writer:
+            writer.add_scalar("trn_loss", trn_loss, epoch)
 
         if ((epoch + 1) % args.validate_and_checkpoint_freq == 0) or (epoch == args.epochs - 1):
 
@@ -403,18 +473,22 @@ def run(rank, world_size, args):
             model.eval()
             with torch.no_grad():
                 val_loss, counts = 0, 0
-                iterator = tqdm(enumerate(val_loader), desc=f"[Eval Epoch: {epoch}]", total=len(val_loader))
+                iterator = tqdm(enumerate(val_loader), desc=f"[Rank: {rank}; Epoch: {epoch}; Eval]", total=len(val_loader))
                 for val_batch_idx, val_batch in iterator:
-                    val_loss = val_loss + validation_step(model, val_batch, val_batch_idx).item()
+                    val_loss = val_loss + validation_step(model, val_batch, val_batch_idx)[0] * len(val_batch[0])
                     counts = counts + len(val_batch[0])
                 val_loss = val_loss / counts
 
-            logger.info(f"[Epoch: {epoch}; Eval] time: {time()-val_start_time}; val_loss: {val_loss}")
+            val_loss = reduce_tensor(val_loss, world_size)
+            if rank == 0 and writer:
+                writer.add_scalar("val_loss", val_loss, epoch)
+                log_additional_info(writer, model, val_loader, epoch)
 
             if rank == 0:
                 is_best = val_loss < best_loss
                 best_loss = min(val_loss, best_loss)
-                logger.info(f"[Rank: {rank}, Epoch: {epoch}] Saving checkpoint to {args.checkpoint_path}")
+                logger.info(f"[Rank: {rank}, Epoch: {epoch}; Eval] time: {time()-val_start_time}; val_loss: {val_loss}")
+                logger.info(f"[Epoch: {epoch}] Saving checkpoint to {args.checkpoint_path}")
                 save_checkpoint(
                     {
                         "epoch": epoch + 1,
