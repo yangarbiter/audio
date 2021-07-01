@@ -61,7 +61,6 @@ class TestTacotron2Model(TorchaudioTestCase):
             atol=1e-02,
         )
 
-
     @parameterized.expand([(torch.float32, ), (torch.float64, )])
     def test_cpu_smoke_test(self, dtype):
         self._smoke_test(torch.device('cpu'), dtype)

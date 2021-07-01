@@ -96,6 +96,11 @@ class LocationLayer(nn.Module):
 
 
 class Attention(nn.Module):
+    """Attention model
+
+    Args:
+    """
+
     def __init__(self, attention_rnn_dim, embedding_dim,
                  attention_dim, attention_location_n_filters,
                  attention_location_kernel_size):
@@ -113,14 +118,13 @@ class Attention(nn.Module):
     def get_alignment_energies(self, query, processed_memory,
                                attention_weights_cat):
         """
-        PARAMS
-        ------
-        query: decoder output (batch, n_mels * n_frames_per_step)
-        processed_memory: processed encoder outputs (B, T_in, attention_dim)
-        attention_weights_cat: cumulative and prev. att weights (B, 2, max_time)
-        RETURNS
-        -------
-        alignment (batch, max_time)
+        Args:
+            query: decoder output (batch, n_mels * n_frames_per_step)
+            processed_memory: processed encoder outputs (B, T_in, attention_dim)
+            attention_weights_cat: cumulative and prev. att weights (B, 2, max_time)
+
+        Returns:
+            alignment (batch, max_time)
         """
 
         processed_query = self.query_layer(query.unsqueeze(1))
@@ -132,20 +136,18 @@ class Attention(nn.Module):
         return energies
 
     def forward(self, attention_hidden_state, memory, processed_memory,
-                attention_weights_cat, mask):
+                attention_weights_cat, mask) -> Tuple[Tensor, Tensor]:
         """
-        PARAMS
-        ------
-        attention_hidden_state: attention rnn last output
-        memory: encoder outputs
-        processed_memory: processed encoder outputs
-        attention_weights_cat: previous and cummulative attention weights
-        mask: binary mask for padded data
+        Args:
+            attention_hidden_state: attention rnn last output
+            memory: encoder outputs
+            processed_memory: processed encoder outputs
+            attention_weights_cat: previous and cumulative attention weights
+            mask: binary mask for padded data
 
-        OUTPUTS
-        -------
-        attanteion_context
-        attention_weights
+        Returns:
+            attanteion_context
+            attention_weights
         """
         alignment = self.get_alignment_energies(
             attention_hidden_state, processed_memory, attention_weights_cat)
@@ -272,45 +274,6 @@ class Encoder(nn.Module):
 
         return outputs
 
-    #@torch.jit.ignore
-    #def forward(self, x, input_lengths):
-    #    for conv in self.convolutions:
-    #        x = F.dropout(F.relu(conv(x)), 0.5, self.training)
-
-    #    x = x.transpose(1, 2)
-
-    #    # pytorch tensor are not reversible, hence the conversion
-    #    input_lengths = input_lengths.cpu().numpy()
-    #    x = nn.utils.rnn.pack_padded_sequence(
-    #        x, input_lengths, batch_first=True)
-
-    #    self.lstm.flatten_parameters()
-    #    outputs, _ = self.lstm(x)
-
-    #    outputs, _ = nn.utils.rnn.pad_packed_sequence(
-    #        outputs, batch_first=True)
-
-    #    return outputs
-
-    #@torch.jit.export
-    #def infer(self, x, input_lengths):
-    #    device = x.device
-    #    for conv in self.convolutions:
-    #        x = F.dropout(F.relu(conv(x.to(device))), 0.5, self.training)
-
-    #    x = x.transpose(1, 2)
-
-    #    input_lengths = input_lengths.cpu()
-    #    x = nn.utils.rnn.pack_padded_sequence(
-    #        x, input_lengths, batch_first=True)
-
-    #    outputs, _ = self.lstm(x)
-
-    #    outputs, _ = nn.utils.rnn.pad_packed_sequence(
-    #        outputs, batch_first=True)
-
-    #    return outputs
-
 
 class Decoder(nn.Module):
     """
@@ -363,14 +326,15 @@ class Decoder(nn.Module):
             bias=True, w_init_gain='sigmoid')
 
     def get_go_frame(self, memory):
-        """ Gets all zeros frames to use as first decoder input
-        PARAMS
-        ------
-        memory: decoder outputs
-        RETURNS
-        -------
-        decoder_input: all zeros frames
+        """ Gets all zeros frames to use as the first decoder input
+
+        args:
+            memory: decoder outputs
+        
+        returns:
+            decoder_input: all zeros frames
         """
+
         B = memory.size(0)
         dtype = memory.dtype
         device = memory.device
@@ -379,14 +343,15 @@ class Decoder(nn.Module):
             dtype=dtype, device=device)
         return decoder_input
 
-    def initialize_decoder_states(self, memory):
+    def initialize_decoder_states(self,
+                                  memory) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
         """ Initializes attention rnn states, decoder rnn states, attention
         weights, attention cumulative weights, attention context, stores memory
         and stores processed memory
-        PARAMS
-        ------
-        memory: Encoder outputs
-        mask: Mask for padded data if training, expects None for inference
+
+        Args:
+            memory: Encoder outputs
+        
         """
         B = memory.size(0)
         MAX_TIME = memory.size(1)
@@ -466,14 +431,14 @@ class Decoder(nn.Module):
                attention_weights_cum, attention_context, memory,
                processed_memory, mask):
         """ Decoder step using stored states, attention and memory
-        PARAMS
-        ------
-        decoder_input: previous mel output
-        RETURNS
-        -------
-        mel_output:
-        gate_output: gate output energies
-        attention_weights:
+
+        Args:
+            decoder_input: previous mel output
+
+        Returns:
+            mel_output:
+            gate_output: gate output energies
+            attention_weights:
         """
         cell_input = torch.cat((decoder_input, attention_context), -1)
 
@@ -509,19 +474,18 @@ class Decoder(nn.Module):
                 attention_cell, decoder_hidden, decoder_cell, attention_weights,
                 attention_weights_cum, attention_context)
 
-    @torch.jit.ignore
     def forward(self, memory, decoder_inputs, memory_lengths):
         """ Decoder forward pass for training
-        PARAMS
-        ------
-        memory: Encoder outputs
-        decoder_inputs: Decoder inputs for teacher forcing. i.e. mel-specs
-        memory_lengths: Encoder output lengths for attention masking.
-        RETURNS
-        -------
-        mel_outputs: mel outputs from the decoder
-        gate_outputs: gate outputs from the decoder
-        alignments: sequence of attention weights from the decoder
+
+        Args:
+            memory: Encoder outputs
+            decoder_inputs: Decoder inputs for teacher forcing. i.e. mel-specs
+            memory_lengths: Encoder output lengths for attention masking.
+        
+        Returns:
+            mel_outputs: mel outputs from the decoder
+            gate_outputs: gate outputs from the decoder
+            alignments: sequence of attention weights from the decoder
         """
 
         decoder_input = self.get_go_frame(memory).unsqueeze(0)
@@ -576,14 +540,15 @@ class Decoder(nn.Module):
     @torch.jit.export
     def infer(self, memory, memory_lengths):
         """ Decoder inference
-        PARAMS
-        ------
-        memory: Encoder outputs
-        RETURNS
-        -------
-        mel_outputs: mel outputs from the decoder
-        gate_outputs: gate outputs from the decoder
-        alignments: sequence of attention weights from the decoder
+
+        Args:
+            memory: Encoder outputs
+
+        Returns:
+            mel_outputs: mel outputs from the decoder
+            gate_outputs: gate outputs from the decoder
+            alignments: sequence of attention weights from the decoder
+            mel_lengths: 
         """
         decoder_input = self.get_go_frame(memory)
 
@@ -666,7 +631,10 @@ class Tacotron2(nn.Module):
     The product of `upsample_scales` must equal `hop_length`.
 
     Args:
-        upsample_scales: the list of upsample scales.
+        mask_padding: (Default: ``False``)
+        n_mels: number of mel bins (Default: ``80``)
+        n_symbols: number of symbols for the input text (Default: ``148``)
+
         n_classes: the number of output classes.
         hop_length: the number of samples between the starts of consecutive frames.
         n_res_block: the number of ResBlock in stack. (Default: ``10``)
@@ -684,7 +652,7 @@ class Tacotron2(nn.Module):
     def __init__(self,
                  mask_padding: bool = False,
                  n_mels: int = 80,
-                 n_symbols: int = 148, # len(symbols),
+                 n_symbols: int = 148,
                  symbols_embedding_dim: int = 512,
                  encoder_kernel_size: int = 5,
                  encoder_n_convolutions: int = 3,
@@ -711,7 +679,7 @@ class Tacotron2(nn.Module):
         self.n_frames_per_step = n_frames_per_step
         self.embedding = nn.Embedding(n_symbols, symbols_embedding_dim)
         std = sqrt(2.0 / (n_symbols + symbols_embedding_dim))
-        val = sqrt(3.0) * std  # uniform bounds for std
+        val = sqrt(3.0) * std
         self.embedding.weight.data.uniform_(-val, val)
         self.encoder = Encoder(encoder_n_convolutions,
                                encoder_embedding_dim,
@@ -772,14 +740,14 @@ class Tacotron2(nn.Module):
         embedded_inputs = self.embedding(text).transpose(1, 2)
 
         encoder_outputs = self.encoder(embedded_inputs, text_lengths)
-        mel_outputs, gate_outputs, _ = self.decoder(
+        mel_outputs, gate_outputs, alignments = self.decoder(
             encoder_outputs, mel_specgram, memory_lengths=text_lengths)
 
         mel_outputs_postnet = self.postnet(mel_outputs)
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
 
         return self._parse_output(
-            (mel_outputs, mel_outputs_postnet, gate_outputs),
+            (mel_outputs, mel_outputs_postnet, gate_outputs, alignments),
             mel_specgram_lengths)
 
     def infer(self, text: Tensor, text_lengths: Tensor) -> Tensor:

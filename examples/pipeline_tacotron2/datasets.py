@@ -62,12 +62,8 @@ def split_process_dataset(dataset, file_path, val_ratio, transforms):
         lengths = [len(data) - val_length, val_length]
         train_dataset, val_dataset = random_split(data, lengths)
 
-    elif dataset == 'libritts':
-        train_dataset = LIBRITTS(root=file_path, url='train-clean-100', download=False)
-        val_dataset = LIBRITTS(root=file_path, url='dev-clean', download=False)
-
     else:
-        raise ValueError(f"Expected dataset: `ljspeech` or `libritts`, but found {dataset}")
+        raise ValueError(f"Expected dataset: `ljspeech` , but found {dataset}")
 
     train_dataset = Processed(train_dataset, transforms)
     val_dataset = Processed(val_dataset, transforms)

@@ -125,8 +125,6 @@ def main():
 
     text = "Hello world, I missed you so much."
 
-    #utils = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_tts_utils')
-    #sequences, lengths = utils.prepare_input_sequence([text])
     sequences, lengths = prepare_input_sequence([text])
     sequences, lengths = sequences.long().cuda(), lengths.long().cuda()
 
@@ -138,10 +136,6 @@ def main():
 
     from scipy.io.wavfile import write, read
     write("audio.wav", rate, audio_numpy)
-    _, baseline = read("baseline.wav")
-    assert len(baseline) == len(audio_numpy)
-    assert np.all(baseline == audio_numpy)
-    print("Correct!")
 
 
 if __name__ == "__main__":
