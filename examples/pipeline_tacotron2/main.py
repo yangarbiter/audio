@@ -19,11 +19,6 @@ from torch.optim import Adam
 from torchaudio.models.tacotron2 import Tacotron2
 from tqdm import tqdm
 
-# https://github.com/NVIDIA/apex
-# from apex import amp
-# amp.lists.functional_overrides.FP32_FUNCS.remove('softmax')
-# amp.lists.functional_overrides.FP16_FUNCS.append('softmax')
-
 from datasets import text_mel_collate_fn, split_process_dataset, SpectralNormalization
 from utils import save_checkpoint
 
@@ -36,136 +31,57 @@ logger = logging.getLogger(os.path.basename(__file__))
 
 
 def parse_args(parser):
-    """
-    Parse commandline arguments.
-    """
+    """Parse commandline arguments."""
 
-    parser.add_argument(
-        "--dataset",
-        default="ljspeech",
-        choices=["ljspeech"],
-        type=str,
-        help="select dataset to train with",
-    )
-    parser.add_argument(
-        '--logging-dir',
-        type=str,
-        default=None,
-        help='directory to save the log files'
-    )
-    parser.add_argument(
-        '--dataset-path',
-        type=str,
-        default='./',
-        help='path to dataset'
-    )
-    parser.add_argument(
-        "--val-ratio",
-        default=0.1,
-        type=float,
-        help="the ratio of waveforms for validation"
-    )
+    parser.add_argument("--dataset", default="ljspeech", choices=["ljspeech"], type=str,
+                        help="select dataset to train with")
+    parser.add_argument('--logging-dir', type=str, default=None,
+                        help='directory to save the log files')
+    parser.add_argument('--dataset-path', type=str, default='./',
+                        help='path to dataset')
+    parser.add_argument("--val-ratio", default=0.1, type=float,
+                        help="the ratio of waveforms for validation")
 
-    parser.add_argument(
-        '--anneal-steps',
-        nargs='*',
-        help='epochs after which decrease learning rate'
-    )
-    parser.add_argument(
-        '--anneal-factor',
-        type=float,
-        choices=[0.1, 0.3],
-        default=0.1,
-        help='factor for annealing learning rate'
-    )
+    parser.add_argument('--anneal-steps', nargs='*',
+                        help='epochs after which decrease learning rate')
+    parser.add_argument('--anneal-factor', type=float, choices=[0.1, 0.3], default=0.1,
+                        help='factor for annealing learning rate')
 
     # training
     training = parser.add_argument_group('training setup')
-    training.add_argument(
-        '--epochs',
-        type=int,
-        required=True,
-        help='number of total epochs to run'
-    )
-    training.add_argument(
-        '--checkpoint-path',
-        type=str,
-        default='',
-        help='checkpoint path. If a file exists, the program will load it and resume training.'
-    )
-    training.add_argument(
-        '--workers',
-        default=8,
-        type=int,
-        help="number of data loading workers",
-    )
-    training.add_argument(
-        "--validate-and-checkpoint-freq",
-        default=10,
-        type=int,
-        metavar="N",
-        help="validation frequency in epochs",
-    )
-    training.add_argument(
-        "--logging-freq",
-        default=10,
-        type=int,
-        metavar="N",
-        help="validation frequency in epochs",
-    )
+    training.add_argument('--epochs', type=int, required=True,
+                          help='number of total epochs to run')
+    training.add_argument('--checkpoint-path', type=str, default='',
+                          help='checkpoint path. If a file exists, '
+                               'the program will load it and resume training.')
+    training.add_argument('--workers', default=8, type=int,
+                          help="number of data loading workers")
+    training.add_argument("--validate-and-checkpoint-freq", default=10, type=int, metavar="N",
+                          help="validation and saving checkpoint frequency in epochs",)
+    training.add_argument("--logging-freq", default=10, type=int, metavar="N",
+                          help="logging frequency in epochs")
 
     optimization = parser.add_argument_group('optimization setup')
-    optimization.add_argument(
-        '-lr',
-        '--learning-rate',
-        default=1e-3,
-        type=float,
-        help='learing rate'
-    )
-    optimization.add_argument(
-        '--weight-decay',
-        default=1e-6,
-        type=float,
-        help='weight decay'
-    )
-    optimization.add_argument(
-        '-bs',
-        '--batch-size',
-        default=32,
-        type=int,
-        help='batch size per GPU'
-    )
-    optimization.add_argument(
-        '--grad-clip',
-        default=5.0,
-        type=float,
-        help='enables gradient clipping and sets maximum gradient norm value'
-    )
+    optimization.add_argument('-lr', '--learning-rate', default=1e-3, type=float,
+                              help='initial learing rate')
+    optimization.add_argument('--weight-decay', default=1e-6, type=float,
+                              help='weight decay')
+    optimization.add_argument('-bs', '--batch-size', default=32, type=int,
+                              help='batch size per GPU')
+    optimization.add_argument('--grad-clip', default=5.0, type=float,
+                              help='clipping gradient with maximum gradient norm value')
 
     # dataset parameters
     dataset = parser.add_argument_group('dataset parameters')
-    dataset.add_argument(
-        '--text-cleaners',
-        nargs='*',
-        default=['english_cleaners'],
-        type=str,
-        help='Type of text cleaners for input text'
-    )
+    dataset.add_argument('--text-cleaners', nargs='*', default=['english_cleaners'], type=str,
+                         help='Type of text cleaners for input text')
 
     # model parameters
     model = parser.add_argument_group('model parameters')
-    model.add_argument(
-        '--symbols-embedding-dim',
-        default=512,
-        type=int,
-        help='input embedding dimension'
-    )
-    model.add_argument(
-        '--mask-padding',
-        action='store_true',
-        default=False,
-        help=''
-    )
+    model.add_argument('--symbols-embedding-dim', default=512, type=int,
+                       help='input embedding dimension')
+    model.add_argument('--mask-padding', action='store_true', default=False,
+                       help='use mask padding')
 
     # encoder
     model.add_argument('--encoder-kernel-size', default=5, type=int,
@@ -198,24 +114,16 @@ def parse_args(parser):
                        help='dropout probability for attention LSTM')
     model.add_argument('--p-decoder-dropout', default=0.1, type=float,
                        help='dropout probability for decoder LSTM')
-    model.add_argument(
-        '--decoder-no-early-stopping',
-        action='store_true',
-        default=False,
-        help=''
-    )
+    model.add_argument('--decoder-no-early-stopping', action='store_true',default=False,
+                       help='stop decoding only when all samples are finished')
 
     # mel-post processing network parameters
     model.add_argument('--postnet-embedding-dim', default=512, type=float,
                        help='postnet embedding dimension')
     model.add_argument('--postnet-kernel-size', default=5, type=float,
                        help='postnet kernel size')
-    model.add_argument(
-        '--postnet-n-convolutions',
-        default=5,
-        type=float,
-        help='number of postnet convolutions'
-    )
+    model.add_argument('--postnet-n-convolutions', default=5, type=float,
+                       help='number of postnet convolutions')
 
     # audio parameters
     audio = parser.add_argument_group('audio parameters')
@@ -231,12 +139,8 @@ def parse_args(parser):
                        help='')
     audio.add_argument('--mel-fmin', default=0.0, type=float,
                        help='Minimum mel frequency')
-    audio.add_argument(
-        '--mel-fmax',
-        default=8000.0,
-        type=float,
-        help='Maximum mel frequency'
-    )
+    audio.add_argument('--mel-fmax', default=8000.0, type=float,
+                       help='Maximum mel frequency')
 
     return parser
 
@@ -358,7 +262,7 @@ def run(rank, world_size, args):
 
     optimizer = Adam(model.parameters(), lr=args.learning_rate)
 
-    best_loss = 10.0
+    best_loss = float("inf")
     start_epoch = 0
 
     if args.checkpoint_path and os.path.isfile(args.checkpoint_path):
@@ -531,8 +435,9 @@ def main(args):
 
     if 'CUBLAS_WORKSPACE_CONFIG' in os.environ:
         from numpy.testing import assert_equal
-        # [Rank: 0, Epoch: 0] time: 6.493569612503052; trn_loss: 1394.7091064453125
-        baseline_state_dict = torch.load("./test_ckpt.pth")['state_dict']
+        # old [Rank: 0, Epoch: 0] time: 6.493569612503052; trn_loss: 1394.7091064453125
+        # [Rank: 0, Epoch: 0] time: 6.50419282913208; trn_loss: 43.58185577392578
+        baseline_state_dict = torch.load("./baseline_ckpt.pth")['state_dict']
         state_dict = tacotron2.state_dict()
         for k, v in state_dict.items():
             assert_equal(v.cpu().numpy(), baseline_state_dict[k].cpu().numpy())

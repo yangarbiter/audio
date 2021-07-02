@@ -383,12 +383,12 @@ class Decoder(nn.Module):
 
     def _parse_decoder_inputs(self, decoder_inputs):
         """ Prepares decoder inputs, i.e. mel outputs
-        PARAMS
-        ------
-        decoder_inputs: inputs used for teacher-forced training, i.e. mel-specs
-        RETURNS
-        -------
-        inputs: processed decoder inputs
+
+        Aegs:
+            decoder_inputs: inputs used for teacher-forced training, i.e. mel-specs
+
+        Returns:
+            inputs: processed decoder inputs
         """
         # (B, n_mels, T_out) -> (B, T_out, n_mels)
         decoder_inputs = decoder_inputs.transpose(1, 2)
@@ -401,16 +401,16 @@ class Decoder(nn.Module):
 
     def _parse_decoder_outputs(self, mel_outputs, gate_outputs, alignments):
         """ Prepares decoder outputs for output
-        PARAMS
-        ------
-        mel_outputs:
-        gate_outputs: gate output energies
-        alignments:
-        RETURNS
-        -------
-        mel_outputs:
-        gate_outpust: gate output energies
-        alignments:
+
+        Args:
+            mel_outputs:
+            gate_outputs: gate output energies
+            alignments:
+
+        Returns:
+            mel_outputs:
+            gate_outpust: gate output energies
+            alignments:
         """
         # (T_out, B) -> (B, T_out)
         alignments = alignments.transpose(0, 1).contiguous()
@@ -562,7 +562,7 @@ class Decoder(nn.Module):
          attention_context,
          processed_memory) = self.initialize_decoder_states(memory)
 
-        mel_lengths = torch.zeros([memory.size(0)], dtype=torch.int32, device=memory.device)
+        mel_lengths = torch.ones([memory.size(0)], dtype=torch.int32, device=memory.device)
         not_finished = torch.ones([memory.size(0)], dtype=torch.int32, device=memory.device)
 
         mel_outputs, gate_outputs, alignments = (
@@ -627,23 +627,31 @@ class Tacotron2(nn.Module):
 
     The original implementation was introduced in
     *Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions*
-    [:footcite:`kalchbrenner2018efficient`]. The input channels of waveform and spectrogram have to be 1.
-    The product of `upsample_scales` must equal `hop_length`.
+    [:footcite:`kalchbrenner2018efficient`].
 
     Args:
-        mask_padding: (Default: ``False``)
-        n_mels: number of mel bins (Default: ``80``)
-        n_symbols: number of symbols for the input text (Default: ``148``)
-
-        n_classes: the number of output classes.
-        hop_length: the number of samples between the starts of consecutive frames.
-        n_res_block: the number of ResBlock in stack. (Default: ``10``)
-        n_rnn: the dimension of RNN layer. (Default: ``512``)
-        n_fc: the dimension of fully connected layer. (Default: ``512``)
-        kernel_size: the number of kernel size in the first Conv1d layer. (Default: ``5``)
-        n_freq: the number of bins in a spectrogram. (Default: ``128``)
-        n_hidden: the number of hidden dimensions of resblock. (Default: ``128``)
-        n_output: the number of output dimensions of melresnet. (Default: ``128``)
+        mask_padding (bool, optional): (Default: ``False``)
+        n_mels (int, optional): number of mel bins (Default: ``80``)
+        n_symbols (int, optional): number of symbols for the input text (Default: ``148``)
+        symbols_embedding_dim (int, optional): input embedding dimension (Default: ``512``)
+        encoder_kernel_size (int, optional): encoder kernel size (Default: ``5``)
+        encoder_n_convolutions (int, optional): number of encoder convolutions (Default: ``3``)
+        encoder_embedding_dim (int, optional): encoder embedding dimension (Default: ``512``)
+        attention_rnn_dim (int, optional): number of units in attention LSTM (Default: ``1024``)
+        attention_dim (int, optional): dimension of attention hidden representation (Default: ``128``)
+        attention_location_n_filters (int, optional): number of filters for location-sensitive attention (Default: ``32``)
+        attention_location_kernel_size (int, optional): kernel size for location-sensitive attention (Default: ``31``)
+        n_frames_per_step (int, optional): number of frames processed per step, currently only 1 is supported (Default: ``1``)
+        decoder_rnn_dim (int, optional): number of units in decoder LSTM (Default: ``1024``)
+        prenet_dim (int, optional): number of ReLU units in prenet layers (Default: ``256``)
+        max_decoder_steps (int, optional): maximum number of output mel spectrograms (Default: ``2000``)
+        gate_threshold (float, optional): probability threshold for stop token (Default: ``0.5``)
+        p_attention_dropout (float, optional): dropout probability for attention LSTM (Default: ``0.1``)
+        p_decoder_dropout (float, optional): dropout probability for decoder LSTM (Default: ``0.1``)
+        postnet_embedding_dim (int, optional): postnet embedding dimension (Default: ``512``)
+        postnet_kernel_size (int, optional): postnet kernel size (Default: ``5``)
+        postnet_n_convolutions (int, optional): number of postnet convolutions (Default: ``5``)
+        decoder_no_early_stopping (bool, optional): stop decoding only when all samples are finished (Default: ``False``)
 
     Example
         >>> tacotron2 = Tacotron2()
@@ -720,8 +728,8 @@ class Tacotron2(nn.Module):
         r"""Pass the input through the Tacotron2 model. This is in teacher
         forcing mode, which is generally used for training.
 
-        The input `text` should be padded with zeros to length text_lengths.max().
-        The input `mel_specgram` should be padded with zeros to length mel_specgram_lengths.max().
+        The input ``text`` should be padded with zeros to length text_lengths.max().
+        The input ``mel_specgram`` should be padded with zeros to length mel_specgram_lengths.max().
 
         Args:
             text (Tensor): the input text to Tacotron2.  (n_batch, text_lengths.max())
@@ -733,7 +741,7 @@ class Tacotron2(nn.Module):
             mel_specgram (Tensor): mel spectrogram before postnet (n_batch, n_mels, mel_specgram_lengths.max())
             mel_specgram_postnet (Tensor): mel spectrogram after postnet (n_batch, n_mels, mel_specgram_lengths.max())
             stop_token (Tensor): the output for stop token at each time step (n_batch, mel_specgram_lengths.max())
-            alignment (Tensor): (n_batch, mel_specgram_lengths.max(), text_lengths.max())
+            alignment (Tensor): (n_batch, mel_specgram_lengths.max(), text_lengths.max()+1)
         """
 
         text_lengths, mel_specgram_lengths = text_lengths.data, mel_specgram_lengths.data
@@ -751,22 +759,24 @@ class Tacotron2(nn.Module):
             (mel_outputs, mel_outputs_postnet, gate_outputs, alignments),
             mel_specgram_lengths)
 
-    def infer(self, text: Tensor, text_lengths: Tensor) -> Tensor:
+    @torch.jit.export
+    def infer(self, text: Tensor, text_lengths: Tensor) -> Tuple[Tensor, Tensor]:
         r"""Using Tacotron2 for inference. This is generally used for generating mel spectrograms.
 
         The input `text` should be padded with zeros to length text_lengths.max().
 
         Args:
-            text (Tensor): the input text to Tacotron2.  (n_batch, text_lengths.max())
+            text (Tensor): the input text to Tacotron2.  (n_batch, text_lengths.max()+1)
             text_lengths (Tensor): the length of each text (n_batch)
 
         Return:
-            mel_specgram (Tensor): the predicted mel spectrogram (n_batch, n_mels, mel_specgram_lengths.max())
+            mel_specgram (Tensor): the predicted mel spectrogram (n_batch, n_mels, mel_specgram_lengths.max()+1)
+            mel_specgram_lengths (Tensor): the length of the predicted mel spectrogram (n_batch, ))
         """
 
         embedded_inputs = self.embedding(text).transpose(1, 2)
         encoder_outputs = self.encoder(embedded_inputs, text_lengths)
-        mel_outputs, _, _, _ = self.decoder.infer(encoder_outputs, text_lengths)
+        mel_outputs, _, _, mel_specgram_lengths = self.decoder.infer(encoder_outputs, text_lengths)
 
         mel_outputs_postnet = self.postnet(mel_outputs)
         mel_outputs_postnet = mel_outputs + mel_outputs_postnet
@@ -775,4 +785,4 @@ class Tacotron2(nn.Module):
         # alignments = alignments.unfold(1, BS, BS).transpose(0,2)
 
         # return mel_outputs_postnet, mel_lengths, alignments
-        return mel_outputs_postnet
+        return mel_outputs_postnet, mel_specgram_lengths

@@ -1,5 +1,4 @@
 from typing import Tuple
-import ipdb
 
 import torch
 from torch import Tensor
@@ -13,6 +12,11 @@ from text import text_to_sequence
 class SpectralNormalization(torch.nn.Module):
     def forward(self, input):
         return torch.log(torch.clamp(input, min=1e-5))
+
+
+class InverseSpectralNormalization(torch.nn.Module):
+    def forward(self, input):
+        return torch.exp(input)
 
 
 class MapMemoryCache(torch.utils.data.Dataset):
@@ -75,7 +79,8 @@ def split_process_dataset(dataset, file_path, val_ratio, transforms):
     return train_dataset, val_dataset
 
 
-def text_mel_collate_fn(batch, n_frames_per_step=1) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+def text_mel_collate_fn(batch: Tuple[Tensor, Tensor],
+                        n_frames_per_step: int=1) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
     input_lengths, ids_sorted_decreasing = torch.sort(
         torch.LongTensor([len(x[0]) for x in batch]),
         dim=0, descending=True)
@@ -105,10 +110,5 @@ def text_mel_collate_fn(batch, n_frames_per_step=1) -> Tuple[Tensor, Tensor, Ten
         mel_padded[i, :, :mel.size(1)] = mel
         gate_padded[i, mel.size(1)-1:] = 1
         output_lengths[i] = mel.size(1)
-
-    # Return any extra fields as sorted lists
-    #num_fields = len(batch[0])
-    #extra_fields = tuple([batch[i][f] for i in ids_sorted_decreasing]
-    #                        for f in range(3, num_fields))
 
     return text_padded, input_lengths, mel_padded, gate_padded, output_lengths
