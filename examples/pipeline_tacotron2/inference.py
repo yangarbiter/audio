@@ -1,5 +1,6 @@
 import random
 import argparse
+from functools import partial
 
 import torch
 import torchaudio
@@ -11,27 +12,46 @@ from datasets import InverseSpectralNormalization
 
 
 def parse_args(parser):
-    """
+    r"""
     Parse commandline arguments.
     """
+    parser.add_argument(
+        '--checkpoint-path',
+        type=str,
+        required=True,
+        help='[string] Path to the checkpoint file.'
+    )
+    parser.add_argument(
+        '--output-path',
+        type=str,
+        default="./audio.wav",
+        help='[string] Path to the output .wav file.'
+    )
     parser.add_argument(
         '--input-text',
         '-i',
         type=str,
-        default="Hello world.",
+        default="Hello world",
         help='[string] Type in something here and TTS will generate it!'
+    )
+    parser.add_argument(
+        '--text-preprocessor',
+        default='character',
+        choices=['character', 'phone_character'],
+        type=str,
+        help='[string] Select text preprocessor to use.'
     )
     parser.add_argument(
         '--vocoder',
         default='nvidia_waveglow',
         choices=['griffin_lim', 'nvidia_waveglow'],
         type=str,
-        help="select the vocoder to use",
+        help="Select the vocoder to use.",
     )
     return parser
 
 def unwrap_distributed(state_dict):
-    """Unwraps model from DistributedDataParallel. DDP wraps model in
+    r"""Unwraps model from DistributedDataParallel. DDP wraps model in
     additional "module.", it needs to be removed for single GPU inference.
 
     Adapted from https://github.com/NVIDIA/DeepLearningExamples/blob/master/PyTorch/SpeechSynthesis/Tacotron2/inference.py
@@ -58,17 +78,25 @@ def main(args):
 
     sample_rate = 22050
 
-    tacotron2 = Tacotron2()
-    tacotron2.load_state_dict(unwrap_distributed(torch.load("./test_ckpt.pth", map_location="cuda")['state_dict']))
+    if args.text_preprocessor == "character":
+        from text_preprocessing import symbols
+        from text_preprocessing import text_to_sequence
+        n_symbols = len(symbols)
+        text_preprocessor = text_to_sequence
+    elif args.text_preprocessor == "phone_character":
+        from text.symbols import symbols
+        from text import text_to_sequence
+        n_symbols = len(symbols)
+        text_preprocessor = partial(text_to_sequence, cleaner_names=['english_cleaner'])
+
+    tacotron2 = Tacotron2(n_symbols=n_symbols)
+    tacotron2.load_state_dict(
+        unwrap_distributed(torch.load(args.checkpoint_path, map_location="cuda")['state_dict']))
     tacotron2 = tacotron2.to(device)
     tacotron2.eval()
 
-    #sequences, lengths = prepare_input_sequence([args.input_text])
-    import ipdb; ipdb.set_trace()
-    sequences, lengths = prepare_input_sequence([
-        "Hello world I missed you so much ",
-        "Ken is so funny",
-    ])
+    sequences, lengths = prepare_input_sequence([args.input_text],
+                                                text_processor=text_preprocessor)
     sequences, lengths = sequences.long().to(device), lengths.long().to(device)
     with torch.no_grad():
         mel_specgram, _ = tacotron2.infer(sequences, lengths)
@@ -105,7 +133,7 @@ def main(args):
         specgram = inv_mel(inv_norm(mel_specgram.cpu()))
         waveform = griffin_lim(specgram)
 
-    torchaudio.save("audio.wav", waveform, sample_rate)
+    torchaudio.save(args.output_path, waveform, sample_rate)
 
 
 if __name__ == "__main__":

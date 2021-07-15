@@ -6,7 +6,8 @@ from torch import Tensor
 from torch.utils.data.dataset import random_split
 from torchaudio.datasets import LJSPEECH, LIBRITTS
 
-from text import text_to_sequence
+#from text import text_to_sequence
+#from text_preprocessing import text_to_sequence
 
 
 class SpectralNormalization(torch.nn.Module):
@@ -41,10 +42,10 @@ class MapMemoryCache(torch.utils.data.Dataset):
 
 
 class Processed(torch.utils.data.Dataset):
-    def __init__(self, dataset, transforms, text_cleaners=['english_cleaners']):
+    def __init__(self, dataset, transforms, text_preprocessor):
         self.dataset = dataset
         self.transforms = transforms
-        self.text_cleaners = text_cleaners
+        self.text_preprocessor = text_preprocessor
 
     def __getitem__(self, key):
         item = self.dataset[key]
@@ -55,11 +56,12 @@ class Processed(torch.utils.data.Dataset):
 
     def process_datapoint(self, item):
         melspec = self.transforms(item[0])
-        text_norm = torch.IntTensor(text_to_sequence(item[2], self.text_cleaners))
+        #text_norm = torch.IntTensor(text_to_sequence(item[2], self.text_cleaners))
+        text_norm = torch.IntTensor(self.text_preprocessor(item[2]))
         return text_norm, torch.squeeze(melspec, 0)
 
 
-def split_process_dataset(dataset, file_path, val_ratio, transforms):
+def split_process_dataset(dataset, file_path, val_ratio, transforms, text_preprocessor):
     if dataset == 'ljspeech':
         data = LJSPEECH(root=file_path, download=False)
 
@@ -70,8 +72,8 @@ def split_process_dataset(dataset, file_path, val_ratio, transforms):
     else:
         raise ValueError(f"Expected dataset: `ljspeech` , but found {dataset}")
 
-    train_dataset = Processed(train_dataset, transforms)
-    val_dataset = Processed(val_dataset, transforms)
+    train_dataset = Processed(train_dataset, transforms, text_preprocessor)
+    val_dataset = Processed(val_dataset, transforms, text_preprocessor)
 
     train_dataset = MapMemoryCache(train_dataset)
     val_dataset = MapMemoryCache(val_dataset)
