@@ -44,11 +44,9 @@ class Tacotron2Loss(nn.Module):
                 model_output: Tuple[Tensor, Tensor, Tensor, Tensor],
                 targets: Tuple[Tensor, Tensor]) -> Tuple[Tensor, Tensor, Tensor]:
         mel_target, gate_target = targets[0], targets[1]
-        mel_target.requires_grad = False
-        gate_target.requires_grad = False
         gate_target = gate_target.view(-1, 1)
 
-        mel_out, mel_out_postnet, gate_out, _ = model_output
+        mel_out, mel_out_postnet, gate_out = model_output
         gate_out = gate_out.view(-1, 1)
         mel_loss = nn.MSELoss(reduction=self.reduction)(mel_out, mel_target)
         mel_postnet = nn.MSELoss(reduction=self.reduction)(mel_out_postnet, mel_target)

@@ -20,7 +20,8 @@ from torchaudio.models.tacotron2 import Tacotron2
 from tqdm import tqdm
 
 from datasets import text_mel_collate_fn, split_process_dataset, SpectralNormalization
-from utils import save_checkpoint
+from utils import save_checkpoint, get_text_preprocessor
+from text_preprocessing import symbols, text_to_sequence
 
 from loss_function import Tacotron2Loss
 
@@ -47,6 +48,10 @@ def parse_args(parser):
     parser.add_argument('--anneal-factor', type=float, choices=[0.1, 0.3], default=0.1,
                         help='factor for annealing learning rate')
 
+    parser.add_argument('--text-preprocessor', default='character', type=str,
+                        choices=['character', 'phone_character'],
+                        help='[string] Select text preprocessor to use.')
+
     # training
     training = parser.add_argument_group('training setup')
     training.add_argument('--epochs', type=int, required=True,
@@ -71,59 +76,57 @@ def parse_args(parser):
     optimization.add_argument('--grad-clip', default=5.0, type=float,
                               help='clipping gradient with maximum gradient norm value')
 
-    # dataset parameters
-    dataset = parser.add_argument_group('dataset parameters')
-    dataset.add_argument('--text-cleaners', nargs='*', default=['english_cleaners'], type=str,
-                         help='Type of text cleaners for input text')
-
     # model parameters
     model = parser.add_argument_group('model parameters')
-    model.add_argument('--symbols-embedding-dim', default=512, type=int,
-                       help='input embedding dimension')
     model.add_argument('--mask-padding', action='store_true', default=False,
                        help='use mask padding')
+    model.add_argument('--symbols-embedding-dim', default=512, type=int,
+                       help='input embedding dimension')
 
     # encoder
-    model.add_argument('--encoder-kernel-size', default=5, type=int,
-                       help='encoder kernel size')
-    model.add_argument('--encoder-n-convolutions', default=3, type=int,
-                       help='number of encoder convolutions')
     model.add_argument('--encoder-embedding-dim', default=512, type=int,
                        help='encoder embedding dimension')
-
-    model.add_argument('--attention-dim', default=128, type=int,
-                       help='dimension of attention hidden representation')
-    model.add_argument('--attention-rnn-dim', default=1024, type=int,
-                       help='number of units in attention LSTM')
-    model.add_argument('--attention-location-n-filters', default=32, type=int,
-                       help='number of filters for location-sensitive attention')
-    model.add_argument('--attention-location-kernel-size', default=31, type=int,
-                       help='kernel size for location-sensitive attention')
+    model.add_argument('--encoder-n-convolution', default=3, type=int,
+                       help='number of encoder convolutions')
+    model.add_argument('--encoder-kernel-size', default=5, type=int,
+                       help='encoder kernel size')
     # decoder
     model.add_argument('--n-frames-per-step', default=1, type=int,
                        help='number of frames processed per step (currently only 1 is supported)')
     model.add_argument('--decoder-rnn-dim', default=1024, type=int,
                        help='number of units in decoder LSTM')
-    model.add_argument('--prenet-dim', default=256, type=int,
-                       help='number of ReLU units in prenet layers')
-    model.add_argument('--max-decoder-steps', default=2000, type=int,
-                       help='maximum number of output mel spectrograms')
-    model.add_argument('--gate-threshold', default=0.5, type=float,
-                       help='probability threshold for stop token')
-    model.add_argument('--p-attention-dropout', default=0.1, type=float,
-                       help='dropout probability for attention LSTM')
-    model.add_argument('--p-decoder-dropout', default=0.1, type=float,
+    model.add_argument('--decoder-dropout', default=0.1, type=float,
                        help='dropout probability for decoder LSTM')
+    model.add_argument('--decoder-max-step', default=2000, type=int,
+                       help='maximum number of output mel spectrograms')
     model.add_argument('--decoder-no-early-stopping', action='store_true',default=False,
                        help='stop decoding only when all samples are finished')
 
+    # attention model
+    model.add_argument('--attention-hidden-dim', default=128, type=int,
+                       help='dimension of attention hidden representation')
+    model.add_argument('--attention-rnn-dim', default=1024, type=int,
+                       help='number of units in attention LSTM')
+    model.add_argument('--attention-location-n-filter', default=32, type=int,
+                       help='number of filters for location-sensitive attention')
+    model.add_argument('--attention-location-kernel-size', default=31, type=int,
+                       help='kernel size for location-sensitive attention')
+    model.add_argument('--attention-dropout', default=0.1, type=float,
+                       help='dropout probability for attention LSTM')
+
+    model.add_argument('--prenet-dim', default=256, type=int,
+                       help='number of ReLU units in prenet layers')
+
     # mel-post processing network parameters
-    model.add_argument('--postnet-embedding-dim', default=512, type=float,
-                       help='postnet embedding dimension')
+    model.add_argument('--postnet-n-convolution', default=5, type=float,
+                       help='number of postnet convolutions')
     model.add_argument('--postnet-kernel-size', default=5, type=float,
                        help='postnet kernel size')
-    model.add_argument('--postnet-n-convolutions', default=5, type=float,
-                       help='number of postnet convolutions')
+    model.add_argument('--postnet-embedding-dim', default=512, type=float,
+                       help='postnet embedding dimension')
+
+    model.add_argument('--gate-threshold', default=0.5, type=float,
+                       help='probability threshold for stop token')
 
     # audio parameters
     audio = parser.add_argument_group('audio parameters')
@@ -135,7 +138,7 @@ def parse_args(parser):
                        help='Hop (stride) length')
     audio.add_argument('--win-length', default=1024, type=int,
                        help='Window length')
-    audio.add_argument('--n-mels', default=80, type=int, # n-mel-channels
+    audio.add_argument('--n-mel', default=80, type=int, # n-mel-channels
                        help='')
     audio.add_argument('--mel-fmin', default=0.0, type=float,
                        help='Minimum mel frequency')
@@ -185,14 +188,16 @@ def batch_to_gpu(batch):
 def training_step(model, train_batch, batch_idx):
     (text_padded, input_lengths, mel_padded, output_lengths), y = batch_to_gpu(train_batch)
     y_pred = model(text_padded, input_lengths, mel_padded, output_lengths)
-    losses = Tacotron2Loss(reduction="mean")(y_pred, y)
+    y[0].requires_grad = False
+    y[1].requires_grad = False
+    losses = Tacotron2Loss(reduction="mean")(y_pred[:3], y)
     return losses[0] + losses[1] + losses[2], losses
 
 
 def validation_step(model, val_batch, batch_idx):
     (text_padded, input_lengths, mel_padded, output_lengths), y = batch_to_gpu(val_batch)
     y_pred = model(text_padded, input_lengths, mel_padded, output_lengths)
-    losses = Tacotron2Loss(reduction="mean")(y_pred, y)
+    losses = Tacotron2Loss(reduction="mean")(y_pred[:3], y)
     return losses[0] + losses[1] + losses[2], losses
 
 
@@ -234,28 +239,31 @@ def run(rank, world_size, args):
 
     torch.cuda.set_device(rank)
 
+    symbols, text_preprocessor = get_text_preprocessor(args.text_preprocessor)
+
     model = Tacotron2(
         mask_padding=args.mask_padding,
-        n_mels=args.n_mels,
-        n_symbols=148,  # len(text.symbols.symbols)
-        symbols_embedding_dim=args.symbols_embedding_dim,
-        encoder_kernel_size=args.encoder_kernel_size,
-        encoder_n_convolutions=args.encoder_n_convolutions,
-        attention_rnn_dim=args.attention_rnn_dim,
-        attention_dim=args.attention_dim,
-        attention_location_n_filters=args.attention_location_n_filters,
-        attention_location_kernel_size=args.attention_location_kernel_size,
+        n_mel=args.n_mel,
+        n_symbol=len(symbols),
         n_frames_per_step=args.n_frames_per_step,
+        symbol_embedding_dim=args.symbols_embedding_dim,
+        encoder_embedding_dim=args.encoder_embedding_dim,
+        encoder_n_convolution=args.encoder_n_convolution,
+        encoder_kernel_size=args.encoder_kernel_size,
         decoder_rnn_dim=args.decoder_rnn_dim,
+        decoder_max_step=args.decoder_max_step,
+        decoder_dropout=args.decoder_dropout,
+        decoder_early_stopping=(not args.decoder_no_early_stopping),
+        attention_rnn_dim=args.attention_rnn_dim,
+        attention_hidden_dim=args.attention_hidden_dim,
+        attention_location_n_filter=args.attention_location_n_filter,
+        attention_location_kernel_size=args.attention_location_kernel_size,
+        attention_dropout=args.attention_dropout,
         prenet_dim=args.prenet_dim,
-        max_decoder_steps=args.max_decoder_steps,
-        gate_threshold=args.gate_threshold,
-        p_attention_dropout=args.p_attention_dropout,
-        p_decoder_dropout=args.p_decoder_dropout,
-        postnet_embedding_dim=args.postnet_embedding_dim,
+        postnet_n_convolution=args.postnet_n_convolution,
         postnet_kernel_size=args.postnet_kernel_size,
-        postnet_n_convolutions=args.postnet_n_convolutions,
-        decoder_no_early_stopping=args.decoder_no_early_stopping,
+        postnet_embedding_dim=args.postnet_embedding_dim,
+        gate_threshold=args.gate_threshold,
     ).cuda(rank)
     model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank])
@@ -284,7 +292,7 @@ def run(rank, world_size, args):
         torchaudio.transforms.MelSpectrogram(
             n_fft=args.n_fft,
             sample_rate=args.sample_rate,
-            n_mels=args.n_mels,
+            n_mels=args.n_mel,
             f_max=args.mel_fmax,
             f_min=args.mel_fmin,
             mel_scale='slaney',
@@ -297,7 +305,7 @@ def run(rank, world_size, args):
         SpectralNormalization()
     )
     trainset, valset = split_process_dataset(
-        args.dataset, args.dataset_path, args.val_ratio, transforms)
+        args.dataset, args.dataset_path, args.val_ratio, transforms, text_preprocessor)
 
     train_sampler = torch.utils.data.distributed.DistributedSampler(
         trainset,

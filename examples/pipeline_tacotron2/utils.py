@@ -51,10 +51,25 @@ def pad_sequences(batch: Tensor) -> Tuple[Tensor, Tensor]:
 
 
 def prepare_input_sequence(texts: List[str],
-                           text_processor: Callable[List[str], List[int]]) -> Tuple[Tensor, Tensor]:
+                           text_processor: Callable[[str], List[int]]) -> Tuple[Tensor, Tensor]:
     d = []
     for text in texts:
         d.append(torch.IntTensor(text_processor(text)[:]))
 
     text_padded, input_lengths = pad_sequences(d)
     return text_padded, input_lengths
+
+
+def get_text_preprocessor(preprocessor_name: str) -> Tuple[List[str], Callable[[str], List[int]]]:
+    if preprocessor_name == "character":
+        from text_preprocessing import symbols
+        from text_preprocessing import text_to_sequence
+        text_preprocessor = text_to_sequence
+    elif preprocessor_name == "phone_character":
+        from text.symbols import symbols
+        from text import text_to_sequence
+        text_preprocessor = partial(text_to_sequence, cleaner_names=['english_cleaner'])
+    else:
+        raise ValueError("The preprocessor_name ({preprocessor_name}) provided is not supported.")
+    
+    return symbols, text_preprocessor
