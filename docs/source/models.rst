@@ -88,8 +88,15 @@ WaveRNN
 
   .. automethod:: forward
 
+Factory Functions
+-----------------
+
+get_pretrained_wavernn
+----------------------
+
+.. autofunction:: get_pretrained_wavernn
+
 References
 ~~~~~~~~~~
 
 .. footbibliography::
-

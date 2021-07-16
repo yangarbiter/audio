@@ -1,8 +1,13 @@
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 
 import torch
 from torch import Tensor
 from torch import nn
+try:
+    from torch.hub import load_state_dict_from_url
+except ImportError:
+    from torch.utils.model_zoo import load_url as load_state_dict_from_url
+
 
 __all__ = [
     "ResBlock",
@@ -10,7 +15,27 @@ __all__ = [
     "Stretch2d",
     "UpsampleNetwork",
     "WaveRNN",
+    "get_pretrained_wavernn",
 ]
+
+
+_MODEL_CONFIG_AND_URLS: Dict[str, Tuple[str, Dict[str, Any]]] = {
+    'wavernn_10k_epochs_8bits_ljspeech': (
+        'https://download.pytorch.org/models/audio/wavernn_10k_epochs_8bits_ljspeech.pth',
+        {
+            'upsample_scales': [5, 5, 11],
+            'n_classes': 2 ** 8,  # n_bits = 8
+            'hop_length': 275,
+            'n_res_block': 10,
+            'n_rnn': 512,
+            'n_fc': 512,
+            'kernel_size': 5,
+            'n_freq': 80,
+            'n_hidden': 128,
+            'n_output': 128
+        }
+    )
+}
 
 
 class ResBlock(nn.Module):
@@ -324,3 +349,27 @@ class WaveRNN(nn.Module):
 
         # bring back channel dimension
         return x.unsqueeze(1)
+
+
+def get_pretrained_wavernn(checkpoint_name: str, progress: bool = True) -> WaveRNN:
+    r"""Get pretrained WaveRNN model.
+
+    Here are the available checkpoints:
+
+    - wavernn_10k_epochs_8bits_ljspeech
+
+        WaveRNN model trained with 10k epochs and 8 bits depth waveform on the LJSpeech dataset.
+        The model is trained using the default parameters and code of the examples/pipeline_wavernn/main.py.
+
+    Args:
+        checkpoint_name (str): The name of the checkpoint to load.
+        progress (bool): If True, displays a progress bar of the download to stderr.
+    """
+    if checkpoint_name not in _MODEL_CONFIG_AND_URLS:
+        raise ValueError("The checkpoint_name `{}` is not supported.".format(checkpoint_name))
+
+    url, configs = _MODEL_CONFIG_AND_URLS[checkpoint_name]
+    model = WaveRNN(**configs)
+    state_dict = load_state_dict_from_url(url, progress=progress)
+    model.load_state_dict(state_dict)
+    return model
