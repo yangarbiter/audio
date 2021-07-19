@@ -8,6 +8,7 @@ from .wav2vec2 import (
     wav2vec2_large,
     wav2vec2_large_lv60k,
 )
+from .tacotron2 import Tacotron2
 
 
 __all__ = [
@@ -19,4 +20,5 @@ __all__ = [
     'wav2vec2_base',
     'wav2vec2_large',
     'wav2vec2_large_lv60k',
+    'Tacotron2',
 ]
