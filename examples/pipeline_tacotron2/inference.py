@@ -62,10 +62,32 @@ def unwrap_distributed(state_dict):
     Return:
         unwrapped_state_dict: model's state dict for single GPU
     """
+    mapping = {
+        "encoder.convolutions.0.0.conv.weight": "encoder.convolutions.0.0.weight",
+        "encoder.convolutions.0.0.conv.bias": "encoder.convolutions.0.0.bias",
+        "encoder.convolutions.1.0.conv.weight": "encoder.convolutions.1.0.weight",
+        "encoder.convolutions.1.0.conv.bias": "encoder.convolutions.1.0.bias",
+        "encoder.convolutions.2.0.conv.weight": "encoder.convolutions.2.0.weight",
+        "encoder.convolutions.2.0.conv.bias": "encoder.convolutions.2.0.bias",
+        "decoder.attention_layer.location_layer.location_conv.conv.weight": "decoder.attention_layer.location_layer.location_conv.weight",
+        "postnet.convolutions.0.0.conv.weight": "postnet.convolutions.0.0.weight",
+        "postnet.convolutions.0.0.conv.bias": "postnet.convolutions.0.0.bias",
+        "postnet.convolutions.1.0.conv.weight": "postnet.convolutions.1.0.weight",
+        "postnet.convolutions.1.0.conv.bias": "postnet.convolutions.1.0.bias",
+        "postnet.convolutions.2.0.conv.weight": "postnet.convolutions.2.0.weight",
+        "postnet.convolutions.2.0.conv.bias": "postnet.convolutions.2.0.bias",
+        "postnet.convolutions.3.0.conv.weight": "postnet.convolutions.3.0.weight",
+        "postnet.convolutions.3.0.conv.bias": "postnet.convolutions.3.0.bias",
+        "postnet.convolutions.4.0.conv.weight": "postnet.convolutions.4.0.weight",
+        "postnet.convolutions.4.0.conv.bias": "postnet.convolutions.4.0.bias",
+    }
+
     new_state_dict = {}
     for key, value in state_dict.items():
         new_key = key.replace('module.1.', '')
         new_key = new_key.replace('module.', '')
+        if new_key in mapping:
+            new_key = mapping[new_key]
         new_state_dict[new_key] = value
     return new_state_dict
 
@@ -89,7 +111,7 @@ def main(args):
         n_symbols = len(symbols)
         text_preprocessor = partial(text_to_sequence, cleaner_names=['english_cleaner'])
 
-    tacotron2 = Tacotron2(n_symbols=n_symbols)
+    tacotron2 = Tacotron2(n_symbol=n_symbols)
     tacotron2.load_state_dict(
         unwrap_distributed(torch.load(args.checkpoint_path, map_location="cuda")['state_dict']))
     tacotron2 = tacotron2.to(device)

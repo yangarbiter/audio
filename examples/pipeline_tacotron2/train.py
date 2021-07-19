@@ -18,6 +18,8 @@ from torch.utils.data import DataLoader
 from torch.optim import Adam
 from torchaudio.models.tacotron2 import Tacotron2
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+plt.switch_backend('agg')
 
 from datasets import text_mel_collate_fn, split_process_dataset, SpectralNormalization
 from utils import save_checkpoint, get_text_preprocessor
@@ -138,7 +140,7 @@ def parse_args(parser):
                        help='Hop (stride) length')
     audio.add_argument('--win-length', default=1024, type=int,
                        help='Window length')
-    audio.add_argument('--n-mel', default=80, type=int, # n-mel-channels
+    audio.add_argument('--n-mels', default=80, type=int, # n-mel-channels
                        help='')
     audio.add_argument('--mel-fmin', default=0.0, type=float,
                        help='Minimum mel frequency')
@@ -218,10 +220,18 @@ def log_additional_info(writer, model, loader, epoch):
         (text_padded, input_lengths, mel_padded, output_lengths), _ = batch_to_gpu(data)
         y_pred = model(text_padded, input_lengths, mel_padded, output_lengths)
         mel_out, mel_out_postnet, gate_out, alignment = y_pred
-    writer.add_image("trn/mel_out", mel_out[0], epoch, dataformats="HW")
-    writer.add_image("trn/mel_out_postnet", mel_out_postnet[0], epoch, dataformats="HW")
+
+    fig = plt.figure()
+    ax = plt.gca()
+    ax.imshow(mel_out[0].cpu().numpy())
+    writer.add_figure("trn/mel_out", fig, epoch)
+    fig = plt.figure()
+    ax = plt.gca()
+    ax.imshow(mel_out_postnet[0].cpu().numpy())
+    writer.add_figure("trn/mel_out_postnet", fig, epoch)
     writer.add_image("trn/gate_out", torch.tile(gate_out[:1], (10, 1)), epoch, dataformats="HW")
     writer.add_image("trn/alignment", alignment[0], epoch, dataformats="HW")
+
 
 def run(rank, world_size, args):
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
@@ -243,7 +253,7 @@ def run(rank, world_size, args):
 
     model = Tacotron2(
         mask_padding=args.mask_padding,
-        n_mel=args.n_mel,
+        n_mels=args.n_mels,
         n_symbol=len(symbols),
         n_frames_per_step=args.n_frames_per_step,
         symbol_embedding_dim=args.symbols_embedding_dim,
@@ -292,7 +302,7 @@ def run(rank, world_size, args):
         torchaudio.transforms.MelSpectrogram(
             n_fft=args.n_fft,
             sample_rate=args.sample_rate,
-            n_mels=args.n_mel,
+            n_mels=args.n_mels,
             f_max=args.mel_fmax,
             f_min=args.mel_fmin,
             mel_scale='slaney',
