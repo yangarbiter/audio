@@ -160,8 +160,7 @@ class WaveRNNInferenceWrapper(torch.nn.Module):
                             f"Valid choices are 'both', 'before' and 'after'.")
         return padded
 
-    @torch.jit.export
-    def infer(self,
+    def forward(self,
               specgram: Tensor,
               loss_name: str = "crossentropy",
               mulaw: bool = True,
